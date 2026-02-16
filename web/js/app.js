@@ -212,7 +212,7 @@ window.switchView = function (viewName) {
         'offers': 'Teklif Yönetimi',
         'invoices': 'Fatura Yönetimi',
         'inventory': 'Stok Yönetimi',
-        'inventory': 'Stok Yönetimi',
+        'stock-entry': 'Stok Girişi',
         'companies': 'Şirket Yönetimi',
         'logs': 'Denetim Kayıtları'
     };
@@ -224,6 +224,7 @@ window.switchView = function (viewName) {
     if (viewName === 'offers') loadOffers();
     if (viewName === 'invoices') loadInvoices();
     if (viewName === 'inventory') switchInvTab('products'); // Default tab
+    if (viewName === 'stock-entry') loadStockEntry();
     if (viewName === 'companies') loadCompanies();
     if (viewName === 'logs') loadLogs();
 }
