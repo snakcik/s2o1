@@ -229,60 +229,73 @@ window.switchView = function (viewName) {
 }
 
 window.loadStockEntry = async function () {
-    const sel = document.getElementById('seProduct');
-    if (!sel) return;
-    sel.innerHTML = '<option value="">Yükleniyor...</option>';
+    const pSel = document.getElementById('seProduct');
+    const wSel = document.getElementById('seWarehouse');
+    if (!pSel || !wSel) return;
+
+    pSel.innerHTML = '<option value="">Yükleniyor...</option>';
+    wSel.innerHTML = '<option value="">Yükleniyor...</option>';
+
     try {
-        const res = await fetch(`${API_BASE_URL}/api/product`);
-        const products = await res.json();
-        sel.innerHTML = '<option value="">Ürün Seçiniz...</option>';
+        const [products, warehouses] = await Promise.all([
+            fetch(`${API_BASE_URL}/api/product`).then(r => r.json()),
+            fetch(`${API_BASE_URL}/api/warehouse`).then(r => r.json())
+        ]);
+
+        pSel.innerHTML = '<option value="">Ürün Seçiniz...</option>';
         products.forEach(p => {
-            sel.innerHTML += `<option value="${p.id}">${p.productCode} - ${p.productName} (Mevcut: ${p.currentStock})</option>`;
+            pSel.innerHTML += `<option value="${p.id}">${p.productCode} - ${p.productName} (Mevcut: ${p.currentStock})</option>`;
+        });
+
+        wSel.innerHTML = '<option value="">Depo Seçiniz...</option>';
+        warehouses.forEach(w => {
+            wSel.innerHTML += `<option value="${w.id}">${w.warehouseName}</option>`;
         });
     } catch (e) {
-        sel.innerHTML = '<option value="">Yüklenemedi!</option>';
+        pSel.innerHTML = '<option value="">Yüklenemedi!</option>';
+        wSel.innerHTML = '<option value="">Yüklenemedi!</option>';
     }
 }
 
 window.submitStockEntry = async function () {
     const productId = document.getElementById('seProduct').value;
+    const warehouseId = document.getElementById('seWarehouse').value;
     const quantity = document.getElementById('seQuantity').value;
     const desc = document.getElementById('seDescription').value;
 
-    if (!productId || !quantity || parseFloat(quantity) <= 0) {
-        alert('Lütfen geçerli bir ürün ve miktar giriniz.');
+    if (!productId || !warehouseId || !quantity || parseFloat(quantity) <= 0) {
+        alert('Lütfen geçerli bir ürün, depo ve miktar giriniz.');
         return;
     }
 
-    try {
-        // Fetch current product details to maintain other fields during update
-        const pRes = await fetch(`${API_BASE_URL}/api/product/${productId}`);
-        const product = await pRes.json();
+    const currentUser = JSON.parse(localStorage.getItem('user'));
 
-        const dto = {
-            id: parseInt(productId),
-            productName: product.productName,
-            productCode: product.productCode,
-            categoryId: product.categoryId,
-            brandId: product.brandId,
-            unitId: product.unitId,
-            warehouseId: product.warehouseId,
-            addedStock: parseFloat(quantity)
+    try {
+        const movementDto = {
+            productId: parseInt(productId),
+            warehouseId: parseInt(warehouseId),
+            movementType: 1, // Entry
+            quantity: parseFloat(quantity),
+            description: desc || 'Stok Girişi Sayfası',
+            userId: currentUser ? currentUser.id : 0,
+            documentNo: '-'
         };
 
-        const res = await fetch(`${API_BASE_URL}/api/product`, {
-            method: 'PUT',
+        const res = await fetch(`${API_BASE_URL}/api/stock/movement`, {
+            method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(dto)
+            body: JSON.stringify(movementDto)
         });
 
         if (res.ok) {
-            alert('Stok başarıyla eklendi.');
+            alert('Stok başarıyla kaydedildi.');
             document.getElementById('seQuantity').value = '';
             document.getElementById('seDescription').value = '';
-            loadStockEntry(); // Refresh dropdown info
+            loadStockEntry();
+            // Also refresh product list if it's visible or next time it's loaded
         } else {
-            alert('Hata oluştu.');
+            const err = await res.json();
+            alert('Hata: ' + (err.message || 'İşlem başarısız.'));
         }
     } catch (e) {
         alert('Bağlantı hatası: ' + e.message);
@@ -848,11 +861,10 @@ window.openProductModal = async function (id = null) {
 
     try {
         // Load Dropdowns
-        const [cats, brands, units, warehouses] = await Promise.all([
+        const [cats, brands, units] = await Promise.all([
             fetch(`${API_BASE_URL}/api/product/categories`).then(r => r.json()),
             fetch(`${API_BASE_URL}/api/product/brands`).then(r => r.json()),
-            fetch(`${API_BASE_URL}/api/product/units`).then(r => r.json()),
-            fetch(`${API_BASE_URL}/api/warehouse`).then(r => r.json())
+            fetch(`${API_BASE_URL}/api/product/units`).then(r => r.json())
         ]);
 
 
@@ -868,10 +880,6 @@ window.openProductModal = async function (id = null) {
         unitSel.innerHTML = '<option value="">Birim Seç...</option>';
         units.forEach(u => unitSel.innerHTML += `<option value="${u.id}">${u.unitName}</option>`);
 
-        const wSel = document.getElementById('pWarehouse');
-        wSel.innerHTML = '<option value="">Depo Seç...</option>';
-        warehouses.forEach(w => wSel.innerHTML += `<option value="${w.id}">${w.warehouseName}</option>`);
-
         // If Edit Mode, Fetch Product Details and Set Values
         if (id) {
             const res = await fetch(`${API_BASE_URL}/api/product/${id}`);
@@ -881,7 +889,6 @@ window.openProductModal = async function (id = null) {
             document.getElementById('pCategory').value = p.categoryId;
             document.getElementById('pBrand').value = p.brandId;
             document.getElementById('pUnit').value = p.unitId;
-            document.getElementById('pWarehouse').value = p.warehouseId;
         }
 
     } catch (e) {
@@ -904,15 +911,13 @@ window.createProduct = async function () {
     if (!catVal) return alert('Lütfen bir Kategori seçiniz.');
     if (!brandVal) return alert('Lütfen bir Marka seçiniz.');
     if (!unitVal) return alert('Lütfen bir Birim seçiniz.');
-    if (!wareVal) return alert('Lütfen bir Depo seçiniz.');
 
     const dto = {
         productCode: pCode,
         productName: pName,
         categoryId: parseInt(catVal),
         brandId: parseInt(brandVal),
-        unitId: parseInt(unitVal),
-        warehouseId: parseInt(wareVal)
+        unitId: parseInt(unitVal)
     };
 
     if (id) {

@@ -60,7 +60,7 @@ namespace S2O1.Domain.Entities
         public int UnitId { get; set; }
         public ProductUnit Unit { get; set; }
         
-        public int WarehouseId { get; set; }
+        public int? WarehouseId { get; set; }
         public Warehouse Warehouse { get; set; }
         
         public int? LocationId { get; set; }
