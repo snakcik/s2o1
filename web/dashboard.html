@@ -116,6 +116,8 @@
                 <div style="margin-bottom:1rem; display:flex; gap:0.5rem; flex-wrap:wrap;">
                     <button class="btn-primary tab-inv-btn" data-tab="products" onclick="switchInvTab('products')"
                         style="width: auto;">Ürünler</button>
+                    <button class="btn-primary tab-inv-btn" data-tab="stock-entry" onclick="switchInvTab('stock-entry')"
+                        style="width: auto; background:#9ca3af;">Stok Girişi</button>
                     <button class="btn-primary tab-inv-btn" data-tab="warehouses" onclick="switchInvTab('warehouses')"
                         style="width: auto; background:#9ca3af;">Depolar</button>
                     <button class="btn-primary tab-inv-btn" data-tab="brands" onclick="switchInvTab('brands')"
@@ -151,6 +153,38 @@
                                 </tr>
                             </tbody>
                         </table>
+                    </div>
+                </div>
+
+                <!-- TAB STOCK ENTRY -->
+                <div id="tab-inv-stock-entry" class="inv-tab" style="display:none;">
+                    <div class="glass-card" style="max-width:500px; margin: 0 auto; text-align: left;">
+                        <h3>Yeni Stok Girişi</h3>
+                        <p style="font-size:0.8rem; color:var(--muted); margin-bottom:1.5rem;">Ürün seçerek stok
+                            miktarını güncelleyebilirsiniz.</p>
+
+                        <div class="form-group">
+                            <label>Ürün Seçin</label>
+                            <select id="seProduct"
+                                style="width:100%; padding:0.5rem; border:1px solid #e5e7eb; border-radius:8px;">
+                                <option value="">Yükleniyor...</option>
+                            </select>
+                        </div>
+
+                        <div class="form-group">
+                            <label>Miktar</label>
+                            <input type="number" id="seQuantity" placeholder="Eklenecek stok miktarı"
+                                style="width:100%; padding:0.5rem; border:1px solid #e5e7eb; border-radius:8px;">
+                        </div>
+
+                        <div class="form-group">
+                            <label>Açıklama (Opsiyonel)</label>
+                            <input type="text" id="seDescription" placeholder="Örn: Yeni sevkiyat"
+                                style="width:100%; padding:0.5rem; border:1px solid #e5e7eb; border-radius:8px;">
+                        </div>
+
+                        <button class="btn-primary" onclick="submitStockEntry()" style="margin-top:1rem;">Stok
+                            Ekle</button>
                     </div>
                 </div>
 
@@ -442,16 +476,6 @@
                         <option>Depo Seç...</option>
                     </select>
                 </div>
-            </div>
-            <div class="form-group" id="pInitialStockGroup" style="margin-top:1rem;">
-                <input type="number" id="pInitialStock" placeholder="Başlangıç Stoğu (Adet)"
-                    style="width:100%; padding:0.5rem; border:1px solid #e5e7eb; border-radius:8px;">
-            </div>
-            <div class="form-group" id="pAddStockGroup" style="margin-top:1rem; display:none;">
-                <label style="font-size:0.8rem; color:#6b7280; display:block; margin-bottom:0.25rem;">Stok Ekle
-                    (+)</label>
-                <input type="number" id="pAddStock" placeholder="Eklenecek Miktar"
-                    style="width:100%; padding:0.5rem; border:1px solid #e5e7eb; border-radius:8px;">
             </div>
             <div style="display:flex; gap:1rem; margin-top:1rem;">
                 <button class="btn-primary" onclick="createProduct()">Kaydet</button>

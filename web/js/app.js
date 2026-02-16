@@ -228,6 +228,67 @@ window.switchView = function (viewName) {
     if (viewName === 'logs') loadLogs();
 }
 
+window.loadStockEntry = async function () {
+    const sel = document.getElementById('seProduct');
+    if (!sel) return;
+    sel.innerHTML = '<option value="">Yükleniyor...</option>';
+    try {
+        const res = await fetch(`${API_BASE_URL}/api/product`);
+        const products = await res.json();
+        sel.innerHTML = '<option value="">Ürün Seçiniz...</option>';
+        products.forEach(p => {
+            sel.innerHTML += `<option value="${p.id}">${p.productCode} - ${p.productName} (Mevcut: ${p.currentStock})</option>`;
+        });
+    } catch (e) {
+        sel.innerHTML = '<option value="">Yüklenemedi!</option>';
+    }
+}
+
+window.submitStockEntry = async function () {
+    const productId = document.getElementById('seProduct').value;
+    const quantity = document.getElementById('seQuantity').value;
+    const desc = document.getElementById('seDescription').value;
+
+    if (!productId || !quantity || parseFloat(quantity) <= 0) {
+        alert('Lütfen geçerli bir ürün ve miktar giriniz.');
+        return;
+    }
+
+    try {
+        // Fetch current product details to maintain other fields during update
+        const pRes = await fetch(`${API_BASE_URL}/api/product/${productId}`);
+        const product = await pRes.json();
+
+        const dto = {
+            id: parseInt(productId),
+            productName: product.productName,
+            productCode: product.productCode,
+            categoryId: product.categoryId,
+            brandId: product.brandId,
+            unitId: product.unitId,
+            warehouseId: product.warehouseId,
+            addedStock: parseFloat(quantity)
+        };
+
+        const res = await fetch(`${API_BASE_URL}/api/product`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(dto)
+        });
+
+        if (res.ok) {
+            alert('Stok başarıyla eklendi.');
+            document.getElementById('seQuantity').value = '';
+            document.getElementById('seDescription').value = '';
+            loadStockEntry(); // Refresh dropdown info
+        } else {
+            alert('Hata oluştu.');
+        }
+    } catch (e) {
+        alert('Bağlantı hatası: ' + e.message);
+    }
+}
+
 async function loadSystemInfo(isShort = false) {
     try {
         const res = await fetch(`${API_BASE_URL}/api/system/info`);
@@ -714,6 +775,7 @@ window.switchInvTab = function (tabName) {
     if (btn) btn.style.background = 'var(--primary)';
 
     if (tabName === 'products') loadProducts();
+    if (tabName === 'stock-entry') loadStockEntry();
     if (tabName === 'warehouses') loadWarehouses();
     if (tabName === 'brands') loadBrands();
     if (tabName === 'categories') loadCategories();
@@ -780,15 +842,8 @@ window.openProductModal = async function (id = null) {
         document.getElementById('pBrand').value = '';
         document.getElementById('pUnit').value = '';
         document.getElementById('pWarehouse').value = '';
-        document.getElementById('pInitialStock').value = '';
-        if (document.getElementById('pInitialStockGroup')) document.getElementById('pInitialStockGroup').style.display = 'block';
-        if (document.getElementById('pAddStockGroup')) document.getElementById('pAddStockGroup').style.display = 'none';
-        document.getElementById('pAddStock').value = '';
     } else {
-        if (document.getElementById('pInitialStockGroup')) document.getElementById('pInitialStockGroup').style.display = 'none';
-        // Show Add Stock for Edit
-        if (document.getElementById('pAddStockGroup')) document.getElementById('pAddStockGroup').style.display = 'block';
-        document.getElementById('pAddStock').value = '';
+        // Edit mode
     }
 
     try {
@@ -860,16 +915,8 @@ window.createProduct = async function () {
         warehouseId: parseInt(wareVal)
     };
 
-    if (!id) {
-        const initStock = document.getElementById('pInitialStock').value;
-        dto.initialStock = initStock ? parseFloat(initStock) : 0;
-    }
     if (id) {
         dto.id = parseInt(id);
-        const addStock = document.getElementById('pAddStock').value;
-        if (addStock && parseFloat(addStock) > 0) {
-            dto.addedStock = parseFloat(addStock);
-        }
     }
 
     try {
