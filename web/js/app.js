@@ -152,6 +152,46 @@ window.logout = function () {
     window.location.href = 'index.html';
 }
 
+window.showConfirm = function (title, message, yesText = 'Evet, Sil', noText = 'İptal') {
+    return new Promise((resolve) => {
+        const modal = document.getElementById('deleteConfirmModal');
+        if (!modal) {
+            // Fallback to native confirm if modal not found
+            resolve(confirm(message || title));
+            return;
+        }
+        const titleEl = document.getElementById('confirmTitle');
+        const msgEl = document.getElementById('confirmMessage');
+        const yesBtn = document.getElementById('confirmYesBtn');
+        const noBtn = document.getElementById('confirmNoBtn');
+
+        titleEl.innerText = title || 'Emin misiniz?';
+        msgEl.innerText = message || 'Bu işlem geri alınamaz.';
+        yesBtn.innerText = yesText;
+        noBtn.innerText = noText;
+        modal.style.display = 'flex';
+
+        const handleYes = () => {
+            cleanup();
+            resolve(true);
+        };
+
+        const handleNo = () => {
+            cleanup();
+            resolve(false);
+        };
+
+        const cleanup = () => {
+            modal.style.display = 'none';
+            yesBtn.removeEventListener('click', handleYes);
+            noBtn.removeEventListener('click', handleNo);
+        };
+
+        yesBtn.addEventListener('click', handleYes, { once: true });
+        noBtn.addEventListener('click', handleNo, { once: true });
+    });
+};
+
 window.switchView = function (viewName) {
     const currentUser = JSON.parse(localStorage.getItem('user'));
 
@@ -416,7 +456,7 @@ window.closePermissionsModal = function () { document.getElementById('permission
 
 // DELETE USER
 window.deleteUser = async function (userId, userName) {
-    if (!confirm(`"${userName}" kullanıcısını silmek istediğinizden emin misiniz?\n\nBu işlem geri alınamaz!`)) {
+    if (!(await showConfirm('Kullanıcı Silme', `"${userName}" kullanıcısını silmek istediğinizden emin misiniz?\n\nBu işlem geri alınamaz!`))) {
         return;
     }
 
@@ -529,7 +569,7 @@ window.loadInvoices = async function () {
 }
 
 window.approveOffer = async function (id) {
-    if (!confirm('Teklifi onaylamak istiyor musunuz?')) return;
+    if (!(await showConfirm('Onay', 'Teklifi onaylamak istiyor musunuz?', 'Onayla', 'İptal'))) return;
     try {
         const currentUser = JSON.parse(localStorage.getItem('user'));
         const res = await fetch(`${API_BASE_URL}/api/offers/${id}/approve`, {
@@ -555,7 +595,7 @@ window.approveOffer = async function (id) {
 }
 
 window.createInvoiceFromOffer = async function (id) {
-    if (!confirm('Bu tekliften fatura oluşturulsun mu?')) return;
+    if (!(await showConfirm('Fatura Oluştur', 'Bu tekliften fatura oluşturulsun mu?', 'Oluştur', 'İptal'))) return;
     try {
         const res = await fetch(`${API_BASE_URL}/api/offers/${id}/create-invoice`, { method: 'POST' });
         if (res.ok) {
@@ -569,7 +609,7 @@ window.createInvoiceFromOffer = async function (id) {
 }
 
 window.approveInvoice = async function (id) {
-    if (!confirm('Faturayı onaylamak ve stok düşümü yapmak istiyor musunuz?')) return;
+    if (!(await showConfirm('Fatura Onayı', 'Faturayı onaylamak ve stok düşümü yapmak istiyor musunuz?', 'Onayla', 'İptal'))) return;
     try {
         const res = await fetch(`${API_BASE_URL}/api/invoices/${id}/approve`, { method: 'POST' });
         if (res.ok) {
@@ -653,7 +693,7 @@ window.createCompany = async function () {
 }
 
 window.deleteCompany = async function (id, name) {
-    if (!confirm(`"${name}" şirketini silmek istiyor musunuz?`)) return;
+    if (!(await showConfirm('Şirket Silme', `"${name}" şirketini silmek istiyor musunuz?`))) return;
     try {
         const res = await fetch(`${API_BASE_URL}/api/companies/${id}`, { method: 'DELETE' });
         if (res.ok) { alert('Şirket silindi.'); loadCompanies(); }
@@ -863,7 +903,7 @@ window.createProduct = async function () {
 }
 
 window.deleteProduct = async function (id) {
-    if (!confirm('Bu ürünü silmek istediğinize emin misiniz?')) return;
+    if (!(await showConfirm('Ürün Silme', 'Bu ürünü silmek istediğinize emin misiniz?'))) return;
     try {
         const res = await fetch(`${API_BASE_URL}/api/product/${id}`, { method: 'DELETE' });
         if (res.ok) { alert('Ürün silindi.'); loadProducts(); }
@@ -947,7 +987,7 @@ window.createWarehouse = async function () {
 }
 
 window.deleteWarehouse = async function (id) {
-    if (!confirm('Bu depoyu silmek istediğinize emin misiniz?')) return;
+    if (!(await showConfirm('Depo Silme', 'Bu depoyu silmek istediğinize emin misiniz?'))) return;
     try {
         const res = await fetch(`${API_BASE_URL}/api/warehouse/${id}`, { method: 'DELETE' });
         if (res.ok) { alert('Depo silindi.'); loadWarehouses(); }
@@ -1091,7 +1131,7 @@ window.createSimpleEntity = async function () {
 }
 
 window.deleteSimple = async function (endpoint, id) {
-    if (!confirm('Bu kaydı silmek istediğinize emin misiniz?')) return;
+    if (!(await showConfirm('Kaydı Sil', 'Bu kaydı silmek istediğinize emin misiniz?'))) return;
     try {
         const res = await fetch(`${API_BASE_URL}/api/product/${endpoint}/${id}`, { method: 'DELETE' });
         if (res.ok) {
