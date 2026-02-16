@@ -1,0 +1,8 @@
+<Solution>
+  <Project Path="S2O1.API/S2O1.API.csproj" />
+  <Project Path="S2O1.Business/S2O1.Business.csproj" />
+  <Project Path="S2O1.CLI/S2O1.CLI.csproj" />
+  <Project Path="S2O1.Core/S2O1.Core.csproj" />
+  <Project Path="S2O1.DataAccess/S2O1.DataAccess.csproj" />
+  <Project Path="S2O1.Domain/S2O1.Domain.csproj" />
+</Solution>

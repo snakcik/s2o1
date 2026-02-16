@@ -1,0 +1,19 @@
+
+using System.ComponentModel.DataAnnotations;
+
+namespace S2O1.Business.DTOs.Auth
+{
+    public class CompanyDto
+    {
+        public int Id { get; set; }
+        public string CompanyName { get; set; }
+        public bool AllowNegativeStock { get; set; }
+    }
+
+    public class CreateCompanyDto
+    {
+        [Required]
+        public string CompanyName { get; set; }
+        public bool AllowNegativeStock { get; set; }
+    }
+}

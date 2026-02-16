@@ -1,0 +1,561 @@
+<!DOCTYPE html>
+<html lang="tr">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>2S1O - Dashboard</title>
+    <link rel="stylesheet" href="s2o1.css">
+    <style>
+        .menu-item {
+            padding: 1rem;
+            margin-bottom: 0.5rem;
+            cursor: pointer;
+            border-radius: 8px;
+            transition: background 0.2s;
+            font-weight: 500;
+        }
+
+        .menu-item:hover,
+        .menu-item.active {
+            background: #f3f4f6;
+            color: var(--primary);
+        }
+    </style>
+</head>
+
+<body>
+    <div class="dashboard-layout">
+        <!-- Sidebar -->
+        <div class="sidebar">
+            <div class="logo-area">
+                <div class="logo-text" style="font-size: 1.5rem;">2S1O v2.0</div>
+            </div>
+
+            <div class="menu">
+                <div class="menu-item active">🏠 Anasayfa</div>
+                <div class="menu-item">🏢 Şirketler</div>
+                <div class="menu-item">📦 Stoklar</div>
+                <div class="menu-item">📋 Teklifler</div>
+                <div class="menu-item">🧾 Faturalar</div>
+                <div class="menu-item">👥 Kullanıcı Yönetimi</div>
+                <div class="menu-item">⚙️ Ayarlar</div>
+                <div class="menu-item">📜 Denetim Kayıtları</div>
+            </div>
+
+            <div style="margin-top: auto;">
+                <button class="btn-primary" style="background:var(--error);" onclick="logout()">Çıkış Yap</button>
+            </div>
+        </div>
+
+        <!-- Main Content -->
+        <div class="main-content">
+            <header style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem;">
+                <h1><span id="pageTitle">Dashboard</span></h1>
+                <div style="text-align:right;">
+                    <div style="font-weight:bold;" id="userNameDisplay">...</div>
+                    <div class="badge"
+                        style="background:#e0e7ff; color:var(--primary); padding:0.25rem 0.5rem; border-radius:100px; font-size:0.8rem;">
+                        <span id="userRoleDisplay">...</span>
+                    </div>
+                </div>
+            </header>
+
+            <!-- SECTION: DASHBOARD -->
+            <div id="section-dashboard" class="view-section">
+                <!-- ... existing dashboard content ... -->
+                <div class="grid"
+                    style="display:grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 1.5rem;">
+                    <div class="glass-card" style="text-align: left;">
+                        <h3>Hızlı İşlemler</h3>
+                        <p>Sisteme yeni kullanıcı ekleyebilir veya stok kontrolü yapabilirsiniz.</p>
+                        <button class="btn-primary" onclick="switchView('users')"
+                            style="margin-top:1rem; width:auto;">Kullanıcıları Yönet</button>
+                    </div>
+
+                    <div class="glass-card" style="text-align: left;">
+                        <h3>Sistem Durumu</h3>
+                        <div class="status-check" style="justify-content: flex-start; margin-bottom:0.5rem;">
+                            <div class="status-dot status-online"></div>
+                            <span>API Bağlantısı Aktif</span>
+                        </div>
+                        <div id="dashboardSysInfo" style="font-size:0.9rem; color:var(--muted);">
+                            Yükleniyor...
+                        </div>
+                    </div>
+                </div>
+
+                <!-- SECTION: COMPANIES -->
+                <div id="section-companies" class="view-section" style="display:none;">
+                    <div style="margin-bottom: 1rem; display:flex; justify-content:flex-end;">
+                        <button class="btn-primary" onclick="openCompanyModal()" style="width: auto;">+ Yeni
+                            Şirket</button>
+                    </div>
+                    <div class="glass-card" style="padding:0; overflow-x:auto;">
+                        <table class="user-table">
+                            <thead>
+                                <tr>
+                                    <th>Şirket Adı</th>
+                                    <th>Vergi No</th>
+                                    <th>Negatif Stok İzni</th>
+                                    <th style="text-align:right;">İşlemler</th>
+                                </tr>
+                            </thead>
+                            <tbody id="companyListBody">
+                                <tr>
+                                    <td colspan="4" style="text-align:center;">Yükleniyor...</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- SECTION: INVENTORY -->
+            <div id="section-inventory" class="view-section" style="display:none;">
+                <div style="margin-bottom:1rem; display:flex; gap:0.5rem; flex-wrap:wrap;">
+                    <button class="btn-primary tab-inv-btn" data-tab="products" onclick="switchInvTab('products')"
+                        style="width: auto;">Ürünler</button>
+                    <button class="btn-primary tab-inv-btn" data-tab="warehouses" onclick="switchInvTab('warehouses')"
+                        style="width: auto; background:#9ca3af;">Depolar</button>
+                    <button class="btn-primary tab-inv-btn" data-tab="brands" onclick="switchInvTab('brands')"
+                        style="width: auto; background:#9ca3af;">Markalar</button>
+                    <button class="btn-primary tab-inv-btn" data-tab="categories" onclick="switchInvTab('categories')"
+                        style="width: auto; background:#9ca3af;">Kategoriler</button>
+                    <button class="btn-primary tab-inv-btn" data-tab="units" onclick="switchInvTab('units')"
+                        style="width: auto; background:#9ca3af;">Birimler</button>
+                </div>
+
+                <!-- TAB PRODUCTS -->
+                <div id="tab-inv-products" class="inv-tab">
+                    <div style="margin-bottom: 1rem; display:flex; justify-content:flex-end;">
+                        <button class="btn-primary" onclick="openProductModal()"
+                            style="width: auto; background:#10b981;">+ Yeni Ürün</button>
+                    </div>
+                    <div class="glass-card" style="padding:0; overflow-x:auto;">
+                        <table class="user-table">
+                            <thead>
+                                <tr>
+                                    <th>Kod</th>
+                                    <th>Ad</th>
+                                    <th>Kategori</th>
+                                    <th>Marka</th>
+                                    <th>Depo</th>
+                                    <th>Stok</th>
+                                    <th style="text-align:right;">İşlemler</th>
+                                </tr>
+                            </thead>
+                            <tbody id="productListBody">
+                                <tr>
+                                    <td colspan="6">Yükleniyor...</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- TAB WAREHOUSES -->
+                <div id="tab-inv-warehouses" class="inv-tab" style="display:none;">
+                    <div style="margin-bottom: 1rem; display:flex; justify-content:flex-end;">
+                        <button class="btn-primary" onclick="openWarehouseModal()"
+                            style="width: auto; background:#10b981;">+ Yeni Depo</button>
+                    </div>
+                    <div class="glass-card" style="padding:0; overflow-x:auto;">
+                        <table class="user-table">
+                            <thead>
+                                <tr>
+                                    <th>Ad</th>
+                                    <th>Lokasyon</th>
+                                    <th>Şirket</th>
+                                    <th style="text-align:right;">İşlemler</th>
+                                </tr>
+                            </thead>
+                            <tbody id="warehouseListBody"></tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- TAB BRANDS -->
+                <div id="tab-inv-brands" class="inv-tab" style="display:none;">
+                    <div style="margin-bottom: 1rem; display:flex; justify-content:flex-end;">
+                        <button class="btn-primary" onclick="openSimpleModal('Brand')"
+                            style="width: auto; background:#10b981;">+ Marka</button>
+                    </div>
+                    <div class="glass-card" style="padding:0; overflow-x:auto;">
+                        <table class="user-table">
+                            <thead>
+                                <tr>
+                                    <th>Marka Adı</th>
+                                    <th style="text-align:right;">İşlemler</th>
+                                </tr>
+                            </thead>
+                            <tbody id="brandListBody"></tbody>
+                        </table>
+                    </div>
+                </div>
+                <!-- Other tabs simplified for brevity if needed in JS or expanded later -->
+                <div id="tab-inv-categories" class="inv-tab" style="display:none;">
+                    <div style="margin-bottom: 1rem; display:flex; justify-content:flex-end;">
+                        <button class="btn-primary" onclick="openSimpleModal('Category')"
+                            style="width: auto; background:#10b981;">+ Kategori</button>
+                    </div>
+                    <div class="glass-card" style="padding:0; overflow-x:auto;">
+                        <table class="user-table">
+                            <thead>
+                                <tr>
+                                    <th>Kategori Adı</th>
+                                    <th style="text-align:right;">İşlemler</th>
+                                </tr>
+                            </thead>
+                            <tbody id="categoryListBody"></tbody>
+                        </table>
+                    </div>
+                </div>
+                <div id="tab-inv-units" class="inv-tab" style="display:none;">
+                    <div style="margin-bottom: 1rem; display:flex; justify-content:flex-end;">
+                        <button class="btn-primary" onclick="openSimpleModal('Unit')"
+                            style="width: auto; background:#10b981;">+ Birim</button>
+                    </div>
+                    <div class="glass-card" style="padding:0; overflow-x:auto;">
+                        <table class="user-table">
+                            <thead>
+                                <tr>
+                                    <th>Birim Adı</th>
+                                    <th>Kısa Ad</th>
+                                    <th style="text-align:right;">İşlemler</th>
+                                </tr>
+                            </thead>
+                            <tbody id="unitListBody"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- SECTION: OFFERS -->
+            <div id="section-offers" class="view-section" style="display:none;">
+                <div class="glass-card" style="padding:0; overflow-x:auto;">
+                    <table class="user-table">
+                        <thead>
+                            <tr>
+                                <th>Teklif No</th>
+                                <th>Müşteri</th>
+                                <th>Tarih</th>
+                                <th>Tutar</th>
+                                <th>Durum</th>
+                                <th style="text-align:right;">İşlemler</th>
+                            </tr>
+                        </thead>
+                        <tbody id="offerListBody">
+                            <tr>
+                                <td colspan="6" style="text-align:center;">Henüz veri yok.</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- SECTION: INVOICES -->
+            <div id="section-invoices" class="view-section" style="display:none;">
+                <div class="glass-card" style="padding:0; overflow-x:auto;">
+                    <table class="user-table">
+                        <thead>
+                            <tr>
+                                <th>Fatura No</th>
+                                <th>Tarih</th>
+                                <th>Tutar</th>
+                                <th>Vergi</th>
+                                <th>Durum</th>
+                                <th style="text-align:right;">İşlemler</th>
+                            </tr>
+                        </thead>
+                        <tbody id="invoiceListBody">
+                            <tr>
+                                <td colspan="6" style="text-align:center;">Henüz veri yok.</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- SECTION: USERS -->
+            <div id="section-users" class="view-section" style="display:none;">
+                <div style="margin-bottom: 1rem; display:flex; justify-content:flex-end;">
+                    <button class="btn-primary" onclick="openModal()" style="width: auto;">+ Yeni Kullanıcı</button>
+                </div>
+                <div class="glass-card" style="padding:0; overflow-x:auto;">
+                    <table class="user-table">
+                        <thead>
+                            <tr>
+                                <th>Kullanıcı Adı</th>
+                                <th>Ad Soyad</th>
+                                <th>Email</th>
+                                <th>Rol</th>
+                                <th style="text-align:right;">İşlemler</th>
+                            </tr>
+                        </thead>
+                        <tbody id="userListBody">
+                            <tr>
+                                <td colspan="5" style="text-align:center;">Yükleniyor...</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- SECTION: SETTINGS -->
+            <div id="section-settings" class="view-section" style="display:none;">
+                <div class="glass-card" style="text-align: left;">
+                    <h3>Sistem Bilgileri</h3>
+                    <p><strong>Veritabanı Durumu:</strong> <span id="sysDbStatus">...</span></p>
+                    <p><strong>Uygulama Versiyonu:</strong> <span id="sysVersion">...</span></p>
+                    <p><strong>Çalışma Zamanı:</strong> <span id="sysRuntime">...</span></p>
+                    <p><strong>İşletim Sistemi:</strong> <span id="sysOS">...</span></p>
+                    <p><strong>Environment:</strong> <span id="sysEnv">...</span></p>
+                    <p><strong>Sunucu Saati:</strong> <span id="sysTime">...</span></p>
+                </div>
+            </div>
+
+            <!-- SECTION: LOGS -->
+            <div id="section-logs" class="view-section" style="display:none;">
+                <div class="glass-card" style="padding:0; overflow-x:auto;">
+                    <table class="user-table">
+                        <thead>
+                            <tr>
+                                <th>Tarih</th>
+                                <th>Kullanıcı</th>
+                                <th>Rol</th>
+                                <th>İşlem</th>
+                                <th>Varlık</th>
+                                <th>ID</th>
+                                <th>Açıklama</th>
+                                <th>Kaynak/IP</th>
+                            </tr>
+                        </thead>
+                        <tbody id="logsListBody">
+                            <tr>
+                                <td colspan="8" style="text-align:center;">Yükleniyor...</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <!-- Company Modal -->
+    <div id="companyModal" class="modal-overlay"
+        style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); z-index:1000; align-items:center; justify-content:center;">
+        <div class="glass-card" style="max-width:400px; padding:2rem; background:white;">
+            <h3>Yeni Şirket</h3>
+            <div class="form-group"><input type="text" id="cName" placeholder="Şirket Adı"></div>
+            <div class="form-group"><input type="text" id="cTax" placeholder="Vergi No"></div>
+            <div class="form-group"><input type="text" id="cAddr" placeholder="Adres"></div>
+            <div class="form-group" style="display:flex; align-items:center; gap:0.5rem;">
+                <input type="checkbox" id="cNegative" style="width:auto;"> <label for="cNegative"
+                    style="margin:0;">Negatif Stok İzni</label>
+            </div>
+            <div style="display:flex; gap:1rem;">
+                <button class="btn-primary" onclick="createCompany()">Kaydet</button>
+                <button class="btn-primary" onclick="closeModal('companyModal')"
+                    style="background:#9ca3af;">İptal</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Warehouse Modal -->
+    <div id="warehouseModal" class="modal-overlay"
+        style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); z-index:1000; align-items:center; justify-content:center;">
+        <div class="glass-card" style="max-width:400px; padding:2rem; background:white;">
+            <h3>Yeni Depo</h3>
+            <input type="hidden" id="wId">
+            <div class="form-group"><input type="text" id="wName" placeholder="Depo Adı"></div>
+            <div class="form-group"><input type="text" id="wLoc" placeholder="Lokasyon"></div>
+            <div class="form-group">
+                <select id="wCompany" style="width:100%; padding:0.5rem; border:1px solid #e5e7eb; border-radius:8px;">
+                    <option value="">Şirket Seçin...</option>
+                </select>
+            </div>
+            <div style="display:flex; gap:1rem;">
+                <button class="btn-primary" onclick="createWarehouse()">Kaydet</button>
+                <button class="btn-primary" onclick="closeModal('warehouseModal')"
+                    style="background:#9ca3af;">İptal</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- warehouseModal (Mevcut, kontrol edilecek) -->
+
+    <!-- Company Modal -->
+    <div id="companyModal" class="modal-overlay"
+        style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); z-index:1000; align-items:center; justify-content:center;">
+        <div class="glass-card" style="max-width:400px; padding:2rem; background:white;">
+            <h3>Yeni Şirket</h3>
+            <div class="form-group"><input type="text" id="cName" placeholder="Şirket Adı"></div>
+            <div class="form-group"><input type="text" id="cTax" placeholder="Vergi No"></div>
+            <div class="form-group"><input type="text" id="cAddr" placeholder="Adres"></div>
+            <div class="form-group" style="display:flex; align-items:center;">
+                <input type="checkbox" id="cNegative" style="margin-right:0.5rem;">
+                <label for="cNegative">Negatif Stok İzni</label>
+            </div>
+            <div style="display:flex; gap:1rem;">
+                <button class="btn-primary" onclick="createCompany()">Kaydet</button>
+                <button class="btn-primary" onclick="closeModal('companyModal')"
+                    style="background:#9ca3af;">İptal</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Product Modal -->
+    <div id="productModal" class="modal-overlay"
+        style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); z-index:1000; align-items:center; justify-content:center;">
+        <div class="glass-card" style="max-width:500px; padding:2rem; background:white;">
+            <h3>Yeni Ürün</h3>
+            <input type="hidden" id="pId">
+            <div class="grid" style="grid-template-columns: 1fr 1fr; gap:1rem;">
+                <div class="form-group"><input type="text" id="pCode" placeholder="Ürün Kodu"></div>
+                <div class="form-group"><input type="text" id="pName" placeholder="Ürün Adı"></div>
+            </div>
+            <div class="grid" style="grid-template-columns: 1fr 1fr; gap:1rem;">
+                <div class="form-group">
+                    <select id="pCategory"
+                        style="width:100%; padding:0.5rem; border:1px solid #e5e7eb; border-radius:8px;">
+                        <option>Kategori Seç...</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <select id="pBrand"
+                        style="width:100%; padding:0.5rem; border:1px solid #e5e7eb; border-radius:8px;">
+                        <option>Marka Seç...</option>
+                    </select>
+                </div>
+            </div>
+            <div class="grid" style="grid-template-columns: 1fr 1fr; gap:1rem;">
+                <div class="form-group">
+                    <select id="pUnit" style="width:100%; padding:0.5rem; border:1px solid #e5e7eb; border-radius:8px;">
+                        <option>Birim Seç...</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <select id="pWarehouse"
+                        style="width:100%; padding:0.5rem; border:1px solid #e5e7eb; border-radius:8px;">
+                        <option>Depo Seç...</option>
+                    </select>
+                </div>
+            </div>
+            <div class="form-group" id="pInitialStockGroup" style="margin-top:1rem;">
+                <input type="number" id="pInitialStock" placeholder="Başlangıç Stoğu (Adet)"
+                    style="width:100%; padding:0.5rem; border:1px solid #e5e7eb; border-radius:8px;">
+            </div>
+            <div class="form-group" id="pAddStockGroup" style="margin-top:1rem; display:none;">
+                <label style="font-size:0.8rem; color:#6b7280; display:block; margin-bottom:0.25rem;">Stok Ekle
+                    (+)</label>
+                <input type="number" id="pAddStock" placeholder="Eklenecek Miktar"
+                    style="width:100%; padding:0.5rem; border:1px solid #e5e7eb; border-radius:8px;">
+            </div>
+            <div style="display:flex; gap:1rem; margin-top:1rem;">
+                <button class="btn-primary" onclick="createProduct()">Kaydet</button>
+                <button class="btn-primary" onclick="closeModal('productModal')"
+                    style="background:#9ca3af;">İptal</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Simple Modal (Brand/Cat/Unit) -->
+    <div id="simpleModal" class="modal-overlay"
+        style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); z-index:1000; align-items:center; justify-content:center;">
+        <div class="glass-card" style="max-width:400px; padding:2rem; background:white;">
+            <h3 id="simpleModalTitle">Yeni Kayıt</h3>
+            <input type="hidden" id="simpleModalType">
+            <input type="hidden" id="simpleId">
+            <div class="form-group"><input type="text" id="simpleName" placeholder="Ad"></div>
+            <div class="form-group" id="simpleExtraGroup" style="display:none;"><input type="text" id="simpleExtra"
+                    class="form-input" placeholder=""></div>
+            <div class="form-group" id="simpleDescGroup" style="display:none;"><textarea id="simpleDesc"
+                    class="form-input" placeholder="Açıklama" style="width:100%; padding:0.5rem;"></textarea></div>
+            <div class="form-group" id="simpleDecimalGroup" style="display:none; margin-top:0.5rem;">
+                <label style="display:flex; align-items:center;">
+                    <input type="checkbox" id="simpleDecimal" style="margin-right:0.5rem;"> Ondalıklı (Decimal)
+                </label>
+            </div>
+
+            <div style="display:flex; gap:1rem;">
+                <button class="btn-primary" onclick="createSimpleEntity()">Kaydet</button>
+                <button class="btn-primary" onclick="closeModal('simpleModal')"
+                    style="background:#9ca3af;">İptal</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Create User Modal -->
+    <div id="userModal"
+        style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); z-index:1000; align-items:center; justify-content:center;">
+        <div class="glass-card" style="max-width:400px; padding:2rem; background:white;">
+            <h3 style="margin-top:0;">Yeni Kullanıcı</h3>
+            <div class="form-group"><input type="text" id="uName" placeholder="Kullanıcı Adı"></div>
+            <div class="form-group"><input type="password" id="uPass" placeholder="Şifre"></div>
+            <div class="form-group"><input type="text" id="uFirst" placeholder="Ad"></div>
+            <div class="form-group"><input type="text" id="uLast" placeholder="Soyad"></div>
+            <div class="form-group"><input type="email" id="uEmail" placeholder="Email"></div>
+            <div class="form-group"><input type="text" id="uReg" placeholder="Sicil No"></div>
+            <div class="form-group">
+                <select id="uRole" style="width:100%; padding:0.5rem; border:1px solid #e5e7eb; border-radius:8px;">
+                    <option value="2">Admin</option>
+                    <option value="3">User</option>
+                </select>
+            </div>
+            <div style="display:flex; gap:1rem;">
+                <button class="btn-primary" onclick="createUser()">Kaydet</button>
+                <button class="btn-primary" onclick="closeModal()" style="background:#9ca3af;">İptal</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Permissions Modal -->
+    <div id="permissionsModal"
+        style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); z-index:1000; align-items:center; justify-content:center;">
+        <div class="glass-card" style="max-width:600px; padding:2rem; background:white; width:90%; border-radius:12px;">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem;">
+                <h3 style="margin:0;">Yetki Yönetimi: <span id="permUserName">...</span></h3>
+                <button onclick="closePermissionsModal()"
+                    style="border:none; background:transparent; font-size:1.5rem; cursor:pointer;">&times;</button>
+            </div>
+            <input type="hidden" id="permUserId">
+            <div
+                style="overflow-y:auto; max-height:60vh; margin-bottom:1rem; border:1px solid #f3f4f6; border-radius:8px;">
+                <table class="user-table" style="width:100%;">
+                    <thead style="position:sticky; top:0; background:#f9fafb;">
+                        <tr>
+                            <th style="padding:0.75rem;">Modül</th>
+                            <th style="text-align:center;">Okuma</th>
+                            <th style="text-align:center;">Yazma</th>
+                            <th style="text-align:center;">Silme</th>
+                        </tr>
+                    </thead>
+                    <tbody id="permListBody">
+                        <tr>
+                            <td colspan="4">Yükleniyor...</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+            <div style="display:flex; justify-content:flex-end; gap:1rem;">
+                <button class="btn-primary" onclick="savePermissions()">Değişiklikleri Kaydet</button>
+                <button class="btn-primary" onclick="closePermissionsModal()" style="background:#9ca3af;">Kapat</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="js/app.js?v=4"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            checkAuth();
+            loadDashboard();
+
+            // Initial Load
+            loadSystemInfo(true);
+        });
+    </script>
+</body>
+
+</html>
