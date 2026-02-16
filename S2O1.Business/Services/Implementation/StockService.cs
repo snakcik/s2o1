@@ -7,6 +7,8 @@ using S2O1.Domain.Enums;
 using System;
 using System.Linq;
 using System.Threading.Tasks;
+using Microsoft.EntityFrameworkCore;
+using System.Collections.Generic;
 
 
 namespace S2O1.Business.Services.Implementation
@@ -218,6 +220,30 @@ namespace S2O1.Business.Services.Implementation
                  return product.CurrentStock;
              }
              return 0;
+        }
+
+        public async Task<IEnumerable<WarehouseStockReportDto>> GetWarehouseStockReportAsync(int? warehouseId)
+        {
+            var query = _unitOfWork.Repository<Product>().Query()
+                .Include(p => p.Warehouse)
+                .Include(p => p.Unit)
+                .AsNoTracking();
+
+            if (warehouseId.HasValue)
+            {
+                query = query.Where(p => p.WarehouseId == warehouseId.Value);
+            }
+
+            var products = await query.ToListAsync();
+
+            return products.Select(p => new WarehouseStockReportDto
+            {
+                WarehouseName = p.Warehouse?.WarehouseName ?? "Depo Belirtilmemiş",
+                ProductCode = p.ProductCode,
+                ProductName = p.ProductName,
+                CurrentStock = p.CurrentStock,
+                UnitName = p.Unit?.UnitName ?? "Birim Belirtilmemiş"
+            });
         }
     }
 }

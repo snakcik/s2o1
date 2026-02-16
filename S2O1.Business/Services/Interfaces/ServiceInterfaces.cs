@@ -30,6 +30,7 @@ namespace S2O1.Business.Services.Interfaces
     {
         Task CreateMovementAsync(StockMovementDto movementDto);
         Task<decimal> GetProductStockAsync(int productId, int warehouseId);
+        Task<System.Collections.Generic.IEnumerable<WarehouseStockReportDto>> GetWarehouseStockReportAsync(int? warehouseId);
     }
 
     public interface IWarehouseService

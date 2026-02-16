@@ -36,8 +36,10 @@
                 <div class="menu-item active" onclick="switchView('dashboard')">🏠 Anasayfa</div>
                 <div class="menu-item" onclick="switchView('companies')">🏢 Şirketler</div>
                 <div class="menu-item" onclick="switchView('inventory')">📦 Stoklar</div>
+                <div class="menu-item" onclick="switchView('stock-entry')">➕ Stok Girişi</div>
                 <div class="menu-item" onclick="switchView('offers')">📋 Teklifler</div>
                 <div class="menu-item" onclick="switchView('invoices')">🧾 Faturalar</div>
+                <div class="menu-item" onclick="switchView('reports')">📊 Raporlar</div>
                 <div class="menu-item" onclick="switchView('users')">👥 Kullanıcı Yönetimi</div>
                 <div class="menu-item" onclick="switchView('settings')">⚙️ Ayarlar</div>
                 <div class="menu-item" onclick="switchView('logs')">📜 Denetim Kayıtları</div>
@@ -342,6 +344,44 @@
                     </div>
 
                     <button class="btn-primary" onclick="submitStockEntry()" style="margin-top:1rem;">Stok Ekle</button>
+                </div>
+            </div>
+
+            <!-- SECTION: REPORTS -->
+            <div id="section-reports" class="view-section" style="display:none;">
+                <div class="glass-card" style="margin-bottom:1.5rem; text-align: left;">
+                    <h3 style="margin-top:0;">Stok Raporları</h3>
+                    <div style="display:flex; gap:1rem; align-items:flex-end;">
+                        <div class="form-group" style="flex:1;">
+                            <label>Depoya Göre Filtrele</label>
+                            <select id="reportWarehouseFilter"
+                                style="width:100%; padding:0.5rem; border:1px solid #e5e7eb; border-radius:8px;">
+                                <option value="">Tüm Depolar</option>
+                            </select>
+                        </div>
+                        <button class="btn-primary" onclick="loadStockReport()"
+                            style="width: auto; height:fit-content; margin-bottom:1.2rem;">Raporla</button>
+                    </div>
+                </div>
+
+                <div class="glass-card" style="padding:0; overflow-x:auto;">
+                    <table class="user-table">
+                        <thead>
+                            <tr>
+                                <th>Depo</th>
+                                <th>Ürün Kodu</th>
+                                <th>Ürün Adı</th>
+                                <th>Mevcut Stok</th>
+                                <th>Birim</th>
+                            </tr>
+                        </thead>
+                        <tbody id="reportListBody">
+                            <tr>
+                                <td colspan="5" style="text-align:center;">Lütfen depo seçin veya raporla butonuna
+                                    basın.</td>
+                            </tr>
+                        </tbody>
+                    </table>
                 </div>
             </div>
 

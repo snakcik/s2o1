@@ -213,6 +213,7 @@ window.switchView = function (viewName) {
         'invoices': 'Fatura Yönetimi',
         'inventory': 'Stok Yönetimi',
         'stock-entry': 'Stok Girişi',
+        'reports': 'Raporlar',
         'companies': 'Şirket Yönetimi',
         'logs': 'Denetim Kayıtları'
     };
@@ -225,6 +226,7 @@ window.switchView = function (viewName) {
     if (viewName === 'invoices') loadInvoices();
     if (viewName === 'inventory') switchInvTab('products'); // Default tab
     if (viewName === 'stock-entry') loadStockEntry();
+    if (viewName === 'reports') initReportsView();
     if (viewName === 'companies') loadCompanies();
     if (viewName === 'logs') loadLogs();
 }
@@ -300,6 +302,59 @@ window.submitStockEntry = async function () {
         }
     } catch (e) {
         alert('Bağlantı hatası: ' + e.message);
+    }
+}
+
+window.initReportsView = async function () {
+    const wSel = document.getElementById('reportWarehouseFilter');
+    if (!wSel) return;
+
+    wSel.innerHTML = '<option value="">Tüm Depolar</option>';
+    try {
+        const res = await fetch(`${API_BASE_URL}/api/warehouse`);
+        const warehouses = await res.json();
+        warehouses.forEach(w => {
+            wSel.innerHTML += `<option value="${w.id}">${w.warehouseName}</option>`;
+        });
+        loadStockReport(); // Load everything initially
+    } catch (e) {
+        console.error('Depolar yüklenemedi', e);
+    }
+}
+
+window.loadStockReport = async function () {
+    const warehouseId = document.getElementById('reportWarehouseFilter').value;
+    const tbody = document.getElementById('reportListBody');
+    if (!tbody) return;
+
+    tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;">Yükleniyor...</td></tr>';
+
+    try {
+        let url = `${API_BASE_URL}/api/stock/report`;
+        if (warehouseId) url += `?warehouseId=${warehouseId}`;
+
+        const res = await fetch(url);
+        const data = await res.json();
+
+        tbody.innerHTML = '';
+        if (data.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;">Kayıt bulunamadı.</td></tr>';
+            return;
+        }
+
+        data.forEach(item => {
+            tbody.innerHTML += `
+                <tr>
+                    <td>${item.warehouseName}</td>
+                    <td><b>${item.productCode}</b></td>
+                    <td>${item.productName}</td>
+                    <td><span class="badge" style="background:${item.currentStock > 0 ? '#d1fae5;color:#065f46;' : '#fee2e2;color:#991b1b;'}">${item.currentStock}</span></td>
+                    <td>${item.unitName}</td>
+                </tr>
+            `;
+        });
+    } catch (e) {
+        tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:red;">Hata: ' + e.message + '</td></tr>';
     }
 }
 

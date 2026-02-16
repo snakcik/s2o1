@@ -36,6 +36,13 @@ namespace S2O1.API.Controllers
             }
         }
 
+        [HttpGet("report")]
+        public async Task<IActionResult> GetStockReport([FromQuery] int? warehouseId)
+        {
+            var report = await _stockService.GetWarehouseStockReportAsync(warehouseId);
+            return Ok(report);
+        }
+
         [HttpGet("product/{productId}/warehouse/{warehouseId}")]
         public async Task<IActionResult> GetStock(int productId, int warehouseId)
         {
