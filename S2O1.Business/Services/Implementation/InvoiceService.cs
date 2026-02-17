@@ -125,12 +125,23 @@ namespace S2O1.Business.Services.Implementation
                      await _stockService.CreateMovementAsync(moveDto);
                  }
 
-                 invoice.Status = InvoiceStatus.Approved;
-                 invoice.ApprovedByUserId = approverUserId;
-                 _unitOfWork.Repository<Invoice>().Update(invoice);
-                 
-                 await _unitOfWork.SaveChangesAsync();
-                 await transaction.CommitAsync();
+                invoice.Status = InvoiceStatus.Approved;
+                invoice.ApprovedByUserId = approverUserId;
+                _unitOfWork.Repository<Invoice>().Update(invoice);
+
+                // If linked to an offer, mark it as Completed
+                if (invoice.OfferId.HasValue)
+                {
+                    var offer = await _unitOfWork.Repository<Offer>().GetByIdAsync(invoice.OfferId.Value);
+                    if (offer != null)
+                    {
+                        offer.Status = OfferStatus.Completed;
+                        _unitOfWork.Repository<Offer>().Update(offer);
+                    }
+                }
+                
+                await _unitOfWork.SaveChangesAsync();
+                await transaction.CommitAsync();
                  return true;
              }
              catch

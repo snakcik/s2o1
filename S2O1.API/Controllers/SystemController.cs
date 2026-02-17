@@ -55,5 +55,49 @@ namespace S2O1.API.Controllers
                 os = System.Runtime.InteropServices.RuntimeInformation.OSDescription
             });
         }
+
+        [HttpGet("exchange-rates")]
+        public async Task<IActionResult> GetExchangeRates()
+        {
+            try
+            {
+                using var client = new System.Net.Http.HttpClient();
+                var response = await client.GetStringAsync("https://www.tcmb.gov.tr/kurlar/today.xml");
+                
+                var xml = new System.Xml.XmlDocument();
+                xml.LoadXml(response);
+
+                decimal GetRate(string code)
+                {
+                    var node = xml.SelectSingleNode($"//Currency[@CurrencyCode='{code}']");
+                    if (node == null) return 0;
+
+                    var unitStr = node.SelectSingleNode("Unit")?.InnerText;
+                    var rateStr = node.SelectSingleNode("BanknoteSelling")?.InnerText;
+                    
+                    // Eğer efektif satış (BanknoteSelling) boşsa normal satışı (ForexSelling) dene
+                    if (string.IsNullOrEmpty(rateStr))
+                        rateStr = node.SelectSingleNode("ForexSelling")?.InnerText;
+
+                    if (string.IsNullOrEmpty(unitStr) || string.IsNullOrEmpty(rateStr)) return 0;
+
+                    decimal unit = decimal.Parse(unitStr, System.Globalization.CultureInfo.InvariantCulture);
+                    decimal rate = decimal.Parse(rateStr, System.Globalization.CultureInfo.InvariantCulture);
+
+                    return rate / unit;
+                }
+
+                return Ok(new
+                {
+                    USD = GetRate("USD"),
+                    EUR = GetRate("EUR"),
+                    Date = DateTime.Now
+                });
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(new { error = "Kurlar alınamadı: " + ex.Message });
+            }
+        }
     }
 }

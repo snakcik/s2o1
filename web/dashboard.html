@@ -166,6 +166,7 @@
                         <table class="user-table">
                             <thead>
                                 <tr>
+                                    <th>Resim</th>
                                     <th>Kod</th>
                                     <th>Ad</th>
                                     <th>Kategori</th>
@@ -468,7 +469,7 @@
 
                     <div class="form-group">
                         <label>Miktar</label>
-                        <input type="number" id="seQuantity" placeholder="Eklenecek stok miktarı"
+                        <input type="number" id="seQuantity" placeholder="Eklenecek stok miktarı" min="0"
                             style="width:100%; padding:0.5rem; border:1px solid #e5e7eb; border-radius:8px;">
                     </div>
 
@@ -593,17 +594,17 @@
             <div class="grid" style="grid-template-columns: 1fr 1fr; gap:1rem;">
                 <div class="form-group">
                     <label>Alış Fiyatı</label>
-                    <input type="number" id="plPurchasePrice" placeholder="0.00" step="0.01">
+                    <input type="number" id="plPurchasePrice" placeholder="0.00" step="0.01" min="0">
                 </div>
                 <div class="form-group">
                     <label>Satış Fiyatı</label>
-                    <input type="number" id="plSalePrice" placeholder="0.00" step="0.01">
+                    <input type="number" id="plSalePrice" placeholder="0.00" step="0.01" min="0">
                 </div>
             </div>
             <div class="grid" style="grid-template-columns: 1fr 1fr; gap:1rem;">
                 <div class="form-group">
                     <label>KDV (%)</label>
-                    <input type="number" id="plVat" placeholder="20" value="20">
+                    <input type="number" id="plVat" placeholder="20" value="20" min="0">
                 </div>
                 <div class="form-group">
                     <label>Para Birimi</label>
@@ -648,7 +649,7 @@
     <div id="offerWizardModal" class="modal-overlay"
         style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); z-index:1000; align-items:center; justify-content:center;">
         <div class="glass-card"
-            style="width: 95%; max-width: 1000px; max-height: 95vh; overflow-y: auto; background: white; padding: 2rem;">
+            style="width: 95%; max-width: 1200px; max-height: 95vh; overflow-y: auto; background: white; padding: 2rem;">
             <div id="wizardHeader"
                 style="margin-bottom: 2rem; border-bottom: 1px solid #e5e7eb; padding-bottom: 1rem; display:flex; justify-content:space-between; align-items:flex-start;">
                 <div>
@@ -689,15 +690,19 @@
 
             <!-- Step 2: Product Selection -->
             <div id="wizard-step-2" class="wizard-pane" style="display:none;">
-                <div class="glass-card" style="padding: 0; max-height: 400px; overflow-y: auto; margin-bottom: 1.5rem;">
+                <div class="glass-card"
+                    style="padding: 0; max-height: 400px; overflow-y: auto; margin-bottom: 1.5rem; max-width: 100%;">
                     <table class="user-table">
                         <thead>
                             <tr>
                                 <th>Ürün Adı</th>
                                 <th>Stok</th>
+                                <th>Rezerve</th>
+                                <th style="color:var(--primary);">Kalan</th>
                                 <th>Birim</th>
                                 <th>Miktar</th>
                                 <th style="text-align:right;">Ekle</th>
+                                <th style="text-align:center;">Seçilen</th>
                             </tr>
                         </thead>
                         <tbody id="wizardProductList"></tbody>
@@ -711,7 +716,8 @@
 
             <!-- Step 3: Pricing -->
             <div id="wizard-step-3" class="wizard-pane" style="display:none;">
-                <div class="glass-card" style="padding: 0; max-height: 400px; overflow-y: auto; margin-bottom: 1.5rem;">
+                <div class="glass-card"
+                    style="padding: 0; max-height: 400px; overflow-y: auto; margin-bottom: 1.5rem; max-width: 100%;">
                     <table class="user-table">
                         <thead>
                             <tr>
@@ -726,6 +732,37 @@
                         <tbody id="wizardPricingList"></tbody>
                     </table>
                 </div>
+
+                <!-- Döviz Kurları Bölümü -->
+                <div id="wizardCurrencyArea" class="glass-card"
+                    style="margin-bottom: 1.5rem; padding: 1rem; max-width: 100%; display: none;">
+                    <div style="display: flex; align-items: center; gap: 1.5rem; flex-wrap: wrap;">
+                        <div style="font-weight: 600; color: var(--primary);">💱 Döviz Dönüşümü (TL'ye):</div>
+                        <div style="display: flex; align-items: center; gap: 0.5rem;">
+                            <label style="margin:0; font-size:0.8rem;">USD/TRY:</label>
+                            <input type="number" id="wRateUSD" step="0.0001" placeholder="Kur" min="0"
+                                style="width: 110px; padding: 0.4rem;">
+                        </div>
+                        <div style="display: flex; align-items: center; gap: 0.5rem;">
+                            <label style="margin:0; font-size:0.8rem;">EUR/TRY:</label>
+                            <input type="number" id="wRateEUR" step="0.0001" placeholder="Kur" min="0"
+                                style="width: 110px; padding: 0.4rem;">
+                        </div>
+                        <button class="btn-primary" style="width: auto; padding: 0.4rem 1rem; font-size: 0.85rem;"
+                            onclick="fetchExchangeRates()">
+                            Kurları Getir (TCMB)
+                        </button>
+                        <button class="btn-primary"
+                            style="width: auto; padding: 0.4rem 1rem; font-size: 0.85rem; background: var(--success);"
+                            onclick="applyCurrencyConversion()">
+                            Dönüştür
+                        </button>
+                        <div id="currencyWarning" style="font-size: 0.75rem; color: var(--error); display: none;">
+                            ⚠️ Karma döviz tespit edildi, TL'ye çevirmeniz önerilir.
+                        </div>
+                    </div>
+                </div>
+
                 <div style="display: flex; justify-content: space-between; gap: 1rem;">
                     <button class="btn-primary" style="background:#9ca3af;" onclick="wizardNext(2)">⬅️ Geri</button>
                     <button class="btn-primary" onclick="wizardNext(4)">Önizleme ➡️</button>
@@ -889,9 +926,26 @@
             </div>
             <div class="grid" style="grid-template-columns: 1fr; gap:1rem;">
                 <div class="form-group">
+                    <label>Birim</label>
                     <select id="pUnit" style="width:100%; padding:0.5rem; border:1px solid #e5e7eb; border-radius:8px;">
                         <option>Birim Seç...</option>
                     </select>
+                </div>
+                <div class="form-group">
+                    <label>Ürün Resmi</label>
+                    <div style="display:flex; gap:0.5rem; align-items:center;">
+                        <input type="text" id="pImageUrl" placeholder="https://example.com/image.jpg"
+                            oninput="document.getElementById('pImagePreview').src = this.value || 'https://via.placeholder.com/150'"
+                            style="flex:1;">
+                        <button class="btn-primary" style="width:auto; padding:0.5rem 1rem;"
+                            onclick="document.getElementById('pFileInput').click()">Gözat</button>
+                        <input type="file" id="pFileInput" style="display:none;" accept="image/*"
+                            onchange="uploadProductImage(this)">
+                    </div>
+                </div>
+                <div style="text-align:center; display:flex; justify-content:center; margin-bottom:1rem;">
+                    <img id="pImagePreview" src="https://via.placeholder.com/100"
+                        style="width:100px; height:100px; object-fit:contain; border:1px solid #ddd; border-radius:8px;">
                 </div>
             </div>
             <div style="display:flex; gap:1rem; margin-top:1rem;">

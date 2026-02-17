@@ -41,6 +41,7 @@ namespace S2O1.Domain.Entities
         public DateTime OfferDate { get; set; }
         public DateTime ValidUntil { get; set; }
         public decimal TotalAmount { get; set; }
+        public string Currency { get; set; }
         public OfferStatus Status { get; set; }
         
         public byte[] RowVersion { get; set; }
@@ -59,6 +60,7 @@ namespace S2O1.Domain.Entities
         public decimal Quantity { get; set; }
         public decimal UnitPrice { get; set; }
         public decimal DiscountRate { get; set; }
+        public string Currency { get; set; }
     }
 
     public class Invoice : BaseEntity

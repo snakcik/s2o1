@@ -45,6 +45,9 @@ namespace S2O1.Business.Services.Implementation
 
         public async Task<PriceListDto> CreateAsync(CreatePriceListDto dto)
         {
+            if (dto.PurchasePrice < 0 || dto.SalePrice < 0)
+                throw new System.ArgumentException("Prices cannot be negative.");
+
             var entity = _mapper.Map<PriceList>(dto);
             entity.IsActive = true;
             entity.CreateDate = System.DateTime.Now;
@@ -57,6 +60,9 @@ namespace S2O1.Business.Services.Implementation
 
         public async Task<PriceListDto> UpdateAsync(UpdatePriceListDto dto)
         {
+            if (dto.PurchasePrice < 0 || dto.SalePrice < 0)
+                throw new System.ArgumentException("Prices cannot be negative.");
+
             var entity = await _unitOfWork.Repository<PriceList>().GetByIdAsync(dto.Id);
             if (entity == null || entity.IsDeleted) return null;
 

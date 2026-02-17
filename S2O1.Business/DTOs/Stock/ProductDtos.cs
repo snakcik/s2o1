@@ -12,6 +12,9 @@ namespace S2O1.Business.Services.Interfaces
         public string UnitName { get; set; }
         public decimal CurrentStock { get; set; }
         public decimal CurrentPrice { get; set; }
+        public decimal ReservedStock { get; set; }
+        public string Currency { get; set; }
+        public string ImageUrl { get; set; }
     }
 
     public class CreateProductDto
@@ -23,6 +26,7 @@ namespace S2O1.Business.Services.Interfaces
         public int BrandId { get; set; }
         public int UnitId { get; set; }
         public decimal InitialStock { get; set; }
+        public string ImageUrl { get; set; }
     }
 
     public class UpdateProductDto : CreateProductDto

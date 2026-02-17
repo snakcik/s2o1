@@ -28,6 +28,7 @@ namespace S2O1.Business.Common.Mappings
             CreateMap<OfferItem, OfferItemDto>()
                 .ForMember(d => d.ProductName, o => o.MapFrom(s => s.Product.ProductName))
                 .ForMember(d => d.ProductCode, o => o.MapFrom(s => s.Product.ProductCode))
+                .ForMember(d => d.ImageUrl, o => o.MapFrom(s => s.Product.ImageUrl))
                 .ReverseMap();
             CreateMap<Offer, CreateOfferDto>().ReverseMap();
             CreateMap<OfferItem, CreateOfferItemDto>().ReverseMap();
@@ -41,6 +42,7 @@ namespace S2O1.Business.Common.Mappings
             CreateMap<Product, ProductDto>()
                 .ForMember(d => d.UnitName, o => o.MapFrom(s => s.Unit.UnitName))
                 .ForMember(d => d.CurrentPrice, o => o.MapFrom(s => s.PriceLists.FirstOrDefault(p => p.IsActivePrice).SalePrice))
+                .ForMember(d => d.Currency, o => o.MapFrom(s => s.PriceLists.FirstOrDefault(p => p.IsActivePrice).Currency))
                 .ReverseMap();
             CreateMap<Product, CreateProductDto>().ReverseMap();
             CreateMap<Product, UpdateProductDto>().ReverseMap();

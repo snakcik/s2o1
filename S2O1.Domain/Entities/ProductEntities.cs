@@ -67,6 +67,7 @@ namespace S2O1.Domain.Entities
         public ProductLocation Location { get; set; }
         
         public decimal CurrentStock { get; set; } // Managed by StockMovement
+        public string ImageUrl { get; set; }
         
         public byte[] RowVersion { get; set; } // Concurrency Token
 

@@ -78,6 +78,9 @@ namespace S2O1.Business.Services.Implementation
             using var transaction = await _unitOfWork.BeginTransactionAsync();
             try
             {
+                if (movementDto.Quantity < 0)
+                    throw new ArgumentException("Quantity cannot be negative.");
+
                 if (movementDto.MovementType == MovementType.Transfer) // Transfer implies Exit from Source
                 {
                     // Check Negative Stock Permission for Source

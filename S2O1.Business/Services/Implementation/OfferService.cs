@@ -120,6 +120,9 @@ namespace S2O1.Business.Services.Implementation
 
         public async Task<S2O1.Business.DTOs.Stock.OfferDto> CreateAsync(S2O1.Business.DTOs.Stock.CreateOfferDto dto)
         {
+            if (dto.Items.Any(i => i.Quantity < 0 || i.UnitPrice < 0 || i.DiscountRate < 0))
+                throw new Exception("Negatif miktar, fiyat veya indirim girilemez.");
+
             var offer = _mapper.Map<Offer>(dto);
             offer.OfferNumber = "TEK-" + DateTime.Now.Ticks.ToString().Substring(10);
             offer.OfferDate = DateTime.Now;
@@ -128,8 +131,56 @@ namespace S2O1.Business.Services.Implementation
             
             // Calculate Total
             offer.TotalAmount = dto.Items.Sum(i => i.Quantity * i.UnitPrice * (1 - i.DiscountRate / 100));
+            offer.Currency = dto.Items.FirstOrDefault()?.Currency ?? "TL";
 
             await _unitOfWork.Repository<Offer>().AddAsync(offer);
+            await _unitOfWork.SaveChangesAsync();
+
+            return await GetByIdAsync(offer.Id);
+        }
+
+        public async Task<S2O1.Business.DTOs.Stock.OfferDto> UpdateAsync(int id, S2O1.Business.DTOs.Stock.CreateOfferDto dto)
+        {
+            var offer = await _unitOfWork.Repository<Offer>().Query()
+                .Include(x => x.Items)
+                .FirstOrDefaultAsync(x => x.Id == id && !x.IsDeleted);
+
+            if (offer == null) throw new Exception("Teklif bulunamadı.");
+
+            if (dto.Items.Any(i => i.Quantity < 0 || i.UnitPrice < 0 || i.DiscountRate < 0))
+                throw new Exception("Negatif miktar, fiyat veya indirim girilemez.");
+
+            // Faturalandı mı kontrolü
+            var isInvoiced = await _unitOfWork.Repository<Invoice>().Query().AnyAsync(i => i.OfferId == id && !i.IsDeleted);
+            if (isInvoiced || offer.Status == OfferStatus.Completed)
+                throw new Exception("Faturalanmış veya Tamamlanmış teklifler düzenlenemez.");
+
+            offer.CustomerId = dto.CustomerId;
+            offer.ValidUntil = DateTime.Now.AddDays(7); // Default or from DTO if added
+            offer.TotalAmount = dto.Items.Sum(i => i.Quantity * i.UnitPrice * (1 - i.DiscountRate / 100));
+            offer.Currency = dto.Items.FirstOrDefault()?.Currency ?? "TL";
+            offer.Status = OfferStatus.Pending; // Düzenleme sonrası tekrar onaya düşer
+
+            // Kalemleri güncelle (Sil/Yeniden ekle en garanti yöntem)
+            // offer.Items koleksiyonu Include edildiği için içindekileri silebiliriz.
+            var existingItems = offer.Items.ToList();
+            foreach (var item in existingItems)
+            {
+                _unitOfWork.Repository<OfferItem>().Remove(item);
+            }
+
+            offer.Items = dto.Items.Select(i => new OfferItem
+            {
+                ProductId = i.ProductId,
+                Quantity = i.Quantity,
+                UnitPrice = i.UnitPrice,
+                DiscountRate = i.DiscountRate,
+                Currency = i.Currency,
+                IsActive = true,
+                CreateDate = DateTime.Now
+            }).ToList();
+
+            _unitOfWork.Repository<Offer>().Update(offer);
             await _unitOfWork.SaveChangesAsync();
 
             return await GetByIdAsync(offer.Id);

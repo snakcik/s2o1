@@ -1,6 +1,11 @@
 // Automatically use the current host (works for localhost and network IP)
 const API_BASE_URL = window.location.origin;
 
+window.formatMoney = function (val) {
+    if (val === undefined || val === null || isNaN(val)) return '0,00';
+    return parseFloat(val).toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+};
+
 // Intercept all fetch requests to add user headers
 const originalFetch = window.fetch;
 window.fetch = async function (input, init) {
@@ -274,8 +279,8 @@ window.submitStockEntry = async function () {
     const quantity = document.getElementById('seQuantity').value;
     const desc = document.getElementById('seDescription').value;
 
-    if (!productId || !warehouseId || !quantity || parseFloat(quantity) <= 0) {
-        alert('Lütfen geçerli bir ürün, depo ve miktar giriniz.');
+    if (!productId || !warehouseId || !quantity || parseFloat(quantity) < 0) {
+        alert('Lütfen geçerli bir ürün, depo ve miktar giriniz. (Miktar negatif olamaz)');
         return;
     }
 
@@ -643,20 +648,27 @@ window.loadOffers = async function () {
             let statusBadge = '<span class="badge" style="background:#f3f4f6;">Bekliyor</span>';
             if (o.status === 2) statusBadge = '<span class="badge" style="background:var(--success); color:white;">Onaylı</span>';
             if (o.status === 3) statusBadge = '<span class="badge" style="background:var(--error); color:white;">Red</span>';
+            if (o.status === 4) statusBadge = '<span class="badge" style="background:#10b981; color:white;">Faturalandı</span>';
 
             let actions = '';
+            actions += `<button class="btn-primary" style="padding:0.25rem 0.6rem; font-size:0.8rem; width:auto; margin-right:0.5rem; background:#6366f1;" onclick="editOffer(${o.id})">Düzenle</button>`;
+
             if (o.status === 1) { // Pending
                 actions += `<button class="btn-primary" style="padding:0.25rem 0.6rem; font-size:0.8rem; width:auto; margin-right:0.5rem;" onclick="approveOffer(${o.id})">Onayla</button>`;
             } else if (o.status === 2) { // Approved
                 actions += `<button class="btn-primary" style="padding:0.25rem 0.6rem; font-size:0.8rem; width:auto; background:#4f46e5;" onclick="createInvoiceFromOffer(${o.id})">Faturalaştır</button>`;
+            } else if (o.status === 4) { // Completed/Invoiced
+                actions = '<span style="color:var(--muted); font-size:0.8rem;">İşlem Tamamlandı</span>';
             }
+
+            actions += `<button class="btn-primary" style="padding:0.25rem 0.6rem; font-size:0.8rem; width:auto; background:var(--error); margin-left:0.5rem;" onclick="deleteOffer(${o.id})">Sil</button>`;
 
             tr.innerHTML = `
                 <td><strong>${o.offerNumber || '-'}</strong></td>
                 <td>${o.customerName || o.customerId}</td>
                 <td>${new Date(o.offerDate).toLocaleDateString()}</td>
                 <td>${new Date(o.validUntil).toLocaleDateString()}</td>
-                <td>${o.totalAmount.toLocaleString()} ₺</td>
+                <td>${formatMoney(o.totalAmount)} ${getCurrencySymbol(o.currency)}</td>
                 <td>${statusBadge}</td>
                 <td style="text-align:right;">${actions}</td>
             `;
@@ -698,8 +710,8 @@ window.loadInvoices = async function () {
             tr.innerHTML = `
                 <td><strong>${i.invoiceNumber || '-'}</strong></td>
                 <td>${new Date(i.issueDate).toLocaleDateString()}</td>
-                <td>${i.grandTotal} ₺</td>
-                <td>${i.taxTotal} ₺</td>
+                <td>${formatMoney(i.grandTotal)} ₺</td>
+                <td>${formatMoney(i.taxTotal)} ₺</td>
                 <td>${statusBadge}</td>
                 <td style="text-align:right;">${actions}</td>
             `;
@@ -723,6 +735,20 @@ window.approveOffer = async function (id) {
             loadOffers();
         } else {
             alert('İşlem başarısız.');
+        }
+    } catch (e) { alert('Hata: ' + e.message); }
+}
+
+window.deleteOffer = async function (id) {
+    if (!(await showConfirm('Silme Onayı', 'Bu teklifi silmek istediğinize emin misiniz? Bu işlem geri alınamaz.', 'Sil', 'Vazgeç'))) return;
+    try {
+        const res = await fetch(`${API_BASE_URL}/api/offer/${id}`, { method: 'DELETE' });
+        if (res.ok) {
+            alert('Teklif başarıyla silindi.');
+            loadOffers();
+        } else {
+            const err = await res.text();
+            alert('Silme işlemi başarısız: ' + err);
         }
     } catch (e) { alert('Hata: ' + e.message); }
 }
@@ -880,7 +906,9 @@ window.loadProducts = async function () {
 
         products.forEach(p => {
             const tr = document.createElement('tr');
+            const imgUrl = p.imageUrl || 'https://via.placeholder.com/40';
             tr.innerHTML = `
+                <td><img src="${imgUrl}" style="width:40px; height:40px; object-fit:contain; border-radius:4px; border:1px solid #eee;"></td>
                 <td>${p.productCode}</td>
                 <td>${p.productName}</td>
                 <td>${getCatName(p.categoryId)}</td>
@@ -937,6 +965,8 @@ window.openProductModal = async function (id = null) {
             document.getElementById('pCategory').value = p.categoryId;
             document.getElementById('pBrand').value = p.brandId;
             document.getElementById('pUnit').value = p.unitId;
+            document.getElementById('pImageUrl').value = p.imageUrl || '';
+            document.getElementById('pImagePreview').src = p.imageUrl || 'https://via.placeholder.com/100';
             // Warehouse logic if needed
         } else {
             // New Mode - Clear fields
@@ -945,6 +975,8 @@ window.openProductModal = async function (id = null) {
             document.getElementById('pCategory').value = '';
             document.getElementById('pBrand').value = '';
             document.getElementById('pUnit').value = '';
+            document.getElementById('pImageUrl').value = '';
+            document.getElementById('pImagePreview').src = 'https://via.placeholder.com/100';
             // Warehouse clear if needed
         }
     } catch (e) {
@@ -972,7 +1004,8 @@ window.createProduct = async function () {
         productName: pName,
         categoryId: parseInt(catVal),
         brandId: parseInt(brandVal),
-        unitId: parseInt(unitVal)
+        unitId: parseInt(unitVal),
+        imageUrl: document.getElementById('pImageUrl').value
     };
 
     if (id) {
@@ -1007,6 +1040,77 @@ window.createProduct = async function () {
     } catch (e) {
         alert('Bağlantı Hatası: ' + e.message);
     }
+}
+
+window.uploadProductImage = async function (input) {
+    if (!input.files || input.files.length === 0) return;
+    const file = input.files[0];
+
+    // Client-side Resize Logic
+    const MAX_WIDTH = 800;
+    const MAX_HEIGHT = 800;
+    const MAX_SIZE_MB = 2;
+
+    const reader = new FileReader();
+    reader.onload = function (e) {
+        const img = new Image();
+        img.onload = async function () {
+            let width = img.width;
+            let height = img.height;
+
+            // Calculate new dimensions
+            if (width > height) {
+                if (width > MAX_WIDTH) {
+                    height *= MAX_WIDTH / width;
+                    width = MAX_WIDTH;
+                }
+            } else {
+                if (height > MAX_HEIGHT) {
+                    width *= MAX_HEIGHT / height;
+                    height = MAX_HEIGHT;
+                }
+            }
+
+            const canvas = document.createElement('canvas');
+            canvas.width = width;
+            canvas.height = height;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(img, 0, 0, width, height);
+
+            // Convert to Blob (JPEG for compression)
+            canvas.toBlob(async (blob) => {
+                if (!blob) return alert('Resim işlenemedi.');
+
+                if (blob.size > MAX_SIZE_MB * 1024 * 1024) {
+                    alert(`Resim çok büyük. Maksimum ${MAX_SIZE_MB} MB sınırını aşıyor.`);
+                    return;
+                }
+
+                const formData = new FormData();
+                formData.append('file', blob, file.name);
+
+                try {
+                    const res = await fetch(`${API_BASE_URL}/api/upload`, {
+                        method: 'POST',
+                        body: formData
+                    });
+                    if (res.ok) {
+                        const data = await res.json();
+                        document.getElementById('pImageUrl').value = data.url;
+                        document.getElementById('pImagePreview').src = data.url;
+                        input.value = '';
+                    } else {
+                        const err = await res.text();
+                        alert('Yükleme başarısız: ' + err);
+                    }
+                } catch (err) {
+                    alert('Hata: ' + err.message);
+                }
+            }, 'image/jpeg', 0.85); // 0.85 quality JPEG
+        };
+        img.src = e.target.result;
+    };
+    reader.readAsDataURL(file);
 }
 
 window.deleteProduct = async function (id) {
@@ -1431,6 +1535,8 @@ window.savePriceList = async function () {
     };
 
     if (!dto.productId) return alert('Lütfen ürün seçiniz.');
+    if (dto.purchasePrice < 0 || dto.salePrice < 0) return alert('Fiyatlar negatif olamaz.');
+    if (dto.vatRate < 0) return alert('KDV negatif olamaz.');
 
     try {
         const method = id ? 'PUT' : 'POST';
@@ -1652,11 +1758,13 @@ let wizardState = {
     categoryId: null,
     customers: [],
     warehouses: [],
-    categories: []
+    categories: [],
+    lastLoadedProducts: [],
+    offerId: null
 };
 
 window.startOfferWizard = async function () {
-    wizardState = { step: 1, items: [], customers: [], warehouses: [], categories: [] };
+    wizardState = { step: 1, items: [], customers: [], warehouses: [], categories: [], lastLoadedProducts: [], offerId: null };
     document.getElementById('offerWizardModal').style.display = 'flex';
     wizardNext(1);
 
@@ -1681,6 +1789,49 @@ window.startOfferWizard = async function () {
     kSel.innerHTML = '<option value="">Kategori Filtresi (Opsiyonel)</option>' + wizardState.categories.map(k => `<option value="${k.id}">${k.categoryName}</option>`).join('');
 }
 
+window.editOffer = async function (id) {
+    try {
+        const res = await fetch(`${API_BASE_URL}/api/offer/${id}`);
+        if (!res.ok) throw new Error('Teklif detayları alınamadı');
+        const offer = await res.json();
+
+        // Faturalanmış teklif düzenlenemez (UI Kontrolü)
+        if (offer.status === 4) {
+            return alert('Faturalanmış veya Tamamlanmış teklifler düzenlenemez.');
+        }
+
+        // Önce Wizard'ı başlat
+        await startOfferWizard();
+        wizardState.offerId = id;
+
+        // Müşteri seç
+        document.getElementById('wMusteri').value = offer.customerId;
+        wizardState.customerId = offer.customerId;
+
+        // Kalemleri wizardState'e aktar
+        wizardState.items = offer.items.map(i => ({
+            id: i.productId,
+            name: i.productName,
+            code: i.productCode,
+            quantity: i.quantity,
+            price: i.unitPrice,
+            discount: i.discountRate,
+            unit: i.unitName || 'Adet',
+            stock: 0,
+            reserved: 0,
+            currency: i.currency || 'TL',
+            imageUrl: i.imageUrl
+        }));
+
+        // Adım 3'e atla (Fiyatlandırma) ki kullanıcı görsün
+        wizardNext(3);
+
+    } catch (e) {
+        alert('Hata: ' + e.message);
+        console.error(e);
+    }
+}
+
 window.wizardNext = function (step) {
     if (wizardState.step === 1 && step > 1) {
         wizardState.customerId = document.getElementById('wMusteri').value;
@@ -1691,6 +1842,14 @@ window.wizardNext = function (step) {
 
     if (wizardState.step === 2 && step > 2) {
         if (wizardState.items.length === 0) return alert('Lütfen en az bir ürün ekleyin.');
+    }
+
+    if (wizardState.step === 3 && step > 3) {
+        const currencies = wizardState.items.map(i => (i.currency || 'TL').toUpperCase());
+        const uniqueCurrencies = new Set(currencies.map(c => c === 'TRY' ? 'TL' : c));
+        if (uniqueCurrencies.size > 1) {
+            return alert('Dikkat: Teklifte farklı döviz birimleri (TL, USD, EUR) bir arada bulunamaz.\n\nLütfen tüm kalemleri TL\'ye çevirerek devam edin. ⚠️');
+        }
     }
 
     document.querySelectorAll('.wizard-pane').forEach(p => p.style.display = 'none');
@@ -1710,79 +1869,210 @@ window.wizardNext = function (step) {
 
 async function loadWizardProducts() {
     const tbody = document.getElementById('wizardProductList');
-    tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;">Yükleniyor...</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;">Yükleniyor...</td></tr>';
 
     try {
         const res = await fetch(`${API_BASE_URL}/api/product`);
         let products = await res.json();
         if (wizardState.categoryId) products = products.filter(p => p.categoryId == wizardState.categoryId);
 
+        wizardState.lastLoadedProducts = products;
         tbody.innerHTML = '';
         products.forEach(p => {
+            const available = (p.currentStock || 0) - (p.reservedStock || 0);
+            const existing = wizardState.items.find(i => i.id === p.id);
+            const selectedQty = existing ? existing.quantity : 0;
+
             const tr = document.createElement('tr');
-            // ProductDto fields: currentStock, currentPrice, unitName
+            tr.id = `wizard-row-${p.id}`;
             tr.innerHTML = `
-                <td>${p.productName} <br><small>${p.productCode}</small></td>
-                <td><span class="badge ${p.currentStock > 0 ? 'status-online' : 'status-offline'}" style="background:none; color:inherit;">${p.currentStock || 0}</span></td>
+                <td>${p.productName || ''} <br><small>${p.productCode || ''}</small></td>
+                <td>${p.currentStock || 0}</td>
+                <td style="color:var(--error);">${p.reservedStock || 0}</td>
+                <td><strong style="color:${available > 0 ? 'var(--success)' : 'var(--error)'}">${available}</strong></td>
                 <td>${p.unitName || 'Adet'}</td>
                 <td><input type="number" id="qty-${p.id}" value="1" min="1" style="width:60px; padding:0.25rem; border:1px solid #ddd; border-radius:4px;"></td>
                 <td style="text-align:right;">
                     <button class="btn-primary" style="padding:0.25rem 0.6rem; font-size:0.8rem; width:auto;" 
-                        onclick="addToWizardOffer(${p.id}, '${p.productName.replace(/'/g, "\\'")}', '${p.productCode}', ${p.currentStock || 0}, '${p.unitName || 'Adet'}', ${p.currentPrice || 0})">+</button>
+                        onclick="addToWizardOffer(${p.id})">+</button>
                 </td>
+                <td style="text-align:center;"><span id="selected-qty-${p.id}" class="badge" style="background:${selectedQty > 0 ? 'var(--primary)' : '#eee'}; color:${selectedQty > 0 ? 'white' : '#666'};">${selectedQty}</span></td>
             `;
             tbody.appendChild(tr);
         });
-    } catch (e) { console.error(e); }
+    } catch (e) {
+        console.error(e);
+        tbody.innerHTML = '<tr><td colspan="8" style="text-align:center; color:red;">Veriler yüklenemedi.</td></tr>';
+    }
 }
 
-window.addToWizardOffer = function (id, name, code, stock, unit, price) {
+window.addToWizardOffer = function (id) {
+    const product = wizardState.lastLoadedProducts.find(p => p.id === id);
+    if (!product) return;
+
     const qtyInput = document.getElementById(`qty-${id}`);
-    const qty = parseFloat(qtyInput.value) || 1;
+    const qty = parseFloat(qtyInput.value) || 0;
+
+    if (qty <= 0) {
+        alert('Lütfen geçerli bir miktar giriniz.');
+        return;
+    }
+
+    const stock = product.currentStock || 0;
+    const reserved = product.reservedStock || 0;
+    const available = stock - reserved;
+    const unit = product.unitName || 'Adet';
+
     const existing = wizardState.items.find(i => i.id === id);
+    const currentTotal = (existing ? existing.quantity : 0) + qty;
+
+    if (currentTotal > available) {
+        if (!confirm(`⚠️ UYARI: Stok Yetersiz!\n\nKalan (Net) Stok: ${available} ${unit}\nİstenen Toplam: ${currentTotal} ${unit}\n\nYine de eklemek istiyor musunuz?`)) {
+            return;
+        }
+    }
+
     if (existing) {
         existing.quantity += qty;
     } else {
-        wizardState.items.push({ id, name, code, quantity: qty, price: price, discount: 0, unit, stock });
+        wizardState.items.push({
+            id: product.id,
+            name: product.productName,
+            code: product.productCode,
+            quantity: qty,
+            price: product.currentPrice || 0,
+            discount: 0,
+            unit: unit,
+            stock: stock,
+            reserved: reserved,
+            currency: product.currency || 'TL',
+            imageUrl: product.imageUrl
+        });
     }
-    alert(`${name} listeye eklendi.`);
-    qtyInput.value = 1; // reset
+
+    const badge = document.getElementById(`selected-qty-${id}`);
+    if (badge) {
+        const newTotal = existing ? existing.quantity : qty;
+        badge.innerText = newTotal;
+        badge.style.background = 'var(--primary)';
+        badge.style.color = 'white';
+        // Pulse animation
+        badge.style.transform = 'scale(1.2)';
+        setTimeout(() => badge.style.transform = 'scale(1)', 200);
+    }
+
+    qtyInput.value = 1;
 }
 
 function loadWizardPricing() {
     const tbody = document.getElementById('wizardPricingList');
     tbody.innerHTML = '';
 
+    if (wizardState.items.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;">Henüz ürün eklenmedi.</td></tr>';
+        return;
+    }
+
+    const currencies = wizardState.items.map(i => (i.currency || 'TL').toUpperCase());
+    const uniqueCurrencies = new Set(currencies.map(c => c === 'TRY' ? 'TL' : c));
+    const hasMixed = uniqueCurrencies.size > 1;
+    const hasForex = currencies.some(c => c !== 'TL' && c !== 'TRY');
+
+    const curArea = document.getElementById('wizardCurrencyArea');
+    if (curArea) {
+        // Dövizli ürün varsa (USD, EUR vb) kur paneli her zaman görünsün
+        curArea.style.display = hasForex ? 'block' : 'none';
+        const warn = document.getElementById('currencyWarning');
+        if (warn) warn.style.display = hasMixed ? 'block' : 'none';
+    }
+
     wizardState.items.forEach(i => {
         const tr = document.createElement('tr');
+        const symbol = getCurrencySymbol(i.currency);
         const netPrice = (i.price * (1 - i.discount / 100)).toFixed(2);
         tr.innerHTML = `
-            <td><strong>${i.name}</strong><br><small>${i.code}</small></td>
+            <td><strong>${i.name}</strong><br><small>${i.code} <span class="badge" style="background:#eee; color:#666;">${i.currency || 'TL'}</span></small></td>
             <td>${i.quantity} ${i.unit}</td>
             <td>
-                <div style="font-size:0.75rem; color:var(--muted); margin-bottom:2px;">Liste: ${i.price.toLocaleString()} ₺</div>
+                <div style="font-size:0.75rem; color:var(--muted); margin-bottom:2px;">Liste: ${formatMoney(i.price)} ${symbol}</div>
                 <input type="number" step="0.01" value="${i.price}" onchange="updateWizardItem(${i.id}, 'price', this.value)" style="width:90px; padding:0.25rem; border:1px solid #ddd; border-radius:4px;">
-                <div style="font-size:0.75rem; color:var(--primary); margin-top:2px;">Net: <span id="net-price-${i.id}">${parseFloat(netPrice).toLocaleString()}</span> ₺</div>
+                <div style="font-size:0.75rem; color:var(--primary); margin-top:2px;">Net: <span id="net-price-${i.id}">${formatMoney(netPrice)}</span> ${symbol}</div>
             </td>
             <td><input type="number" step="1" value="${i.discount}" onchange="updateWizardItem(${i.id}, 'discount', this.value)" style="width:60px; padding:0.25rem; border:1px solid #ddd; border-radius:4px;"> %</td>
-            <td id="total-${i.id}" style="font-weight:bold;">${(i.quantity * i.price * (1 - i.discount / 100)).toLocaleString()} ₺</td>
+            <td id="total-${i.id}" style="font-weight:bold;">${formatMoney(i.quantity * i.price * (1 - i.discount / 100))} ${symbol}</td>
             <td style="text-align:right;"><button class="btn-primary" style="background:var(--error); width:auto; padding:0.25rem 0.5rem;" onclick="removeFromWizardOffer(${i.id})">❌</button></td>
         `;
         tbody.appendChild(tr);
     });
 }
 
+function getCurrencySymbol(cur) {
+    if (!cur) return '₺';
+    cur = cur.toUpperCase();
+    if (cur === 'USD') return '$';
+    if (cur === 'EUR') return '€';
+    return '₺';
+}
+
+window.fetchExchangeRates = async function () {
+    try {
+        const res = await fetch(`${API_BASE_URL}/api/system/exchange-rates`);
+        if (!res.ok) throw new Error('Kurlar merkezden alınamadı.');
+
+        const data = await res.json();
+        if (data.usd) document.getElementById('wRateUSD').value = data.usd;
+        if (data.eur) document.getElementById('wRateEUR').value = data.eur;
+
+        alert('Güncel kurlar başarıyla alındı. ✅');
+    } catch (e) {
+        console.error('Kur çekme hatası:', e);
+        alert('İnternet erişimi veya CORS kısıtlaması nedeniyle kur otomatik çekilemedi. Lütfen manuel giriş yapınız. ⚠️');
+    }
+}
+
+window.applyCurrencyConversion = function () {
+    const rateUSD = parseFloat(document.getElementById('wRateUSD').value);
+    const rateEUR = parseFloat(document.getElementById('wRateEUR').value);
+
+    let count = 0;
+    wizardState.items.forEach(item => {
+        const cur = (item.currency || 'TL').toUpperCase();
+        if (cur === 'USD' && rateUSD > 0) {
+            item.price = item.price * rateUSD;
+            item.currency = 'TL';
+            count++;
+        } else if (cur === 'EUR' && rateEUR > 0) {
+            item.price = item.price * rateEUR;
+            item.currency = 'TL';
+            count++;
+        }
+    });
+
+    if (count > 0) {
+        alert(`${count} kalem başarıyla TL'ye çevrildi. 💱`);
+        loadWizardPricing();
+    } else {
+        alert('Çevrilecek dövizli kalem bulunamadı veya kurlar geçersiz.');
+    }
+}
+
 window.updateWizardItem = function (id, field, val) {
     const item = wizardState.items.find(i => i.id === id);
     if (item) {
-        item[field] = parseFloat(val) || 0;
+        let valFloat = parseFloat(val) || 0;
+        if (valFloat < 0) {
+            alert('Negatif değer girilemez.');
+            valFloat = 0;
+        }
+        item[field] = valFloat;
+        const symbol = getCurrencySymbol(item.currency);
         const totalEl = document.getElementById(`total-${id}`);
         if (totalEl) {
-            totalEl.innerText = (item.quantity * item.price * (1 - item.discount / 100)).toLocaleString() + ' ₺';
+            totalEl.innerText = formatMoney(item.quantity * item.price * (1 - item.discount / 100)) + ' ' + symbol;
         }
         const netPriceEl = document.getElementById(`net-price-${id}`);
         if (netPriceEl) {
-            netPriceEl.innerText = (item.price * (1 - item.discount / 100)).toLocaleString();
+            netPriceEl.innerText = formatMoney(item.price * (1 - item.discount / 100));
         }
     }
 }
@@ -1795,22 +2085,12 @@ function prepareOfferPreview() {
     const area = document.getElementById('offerPreviewArea');
     const customer = wizardState.customers.find(c => c.id == wizardState.customerId);
 
-    let subTotal = 0;
-    let itemsHtml = wizardState.items.map(i => {
-        const lineTotal = i.quantity * i.price * (1 - i.discount / 100);
-        subTotal += lineTotal;
-        return `<tr>
-            <td style="padding:0.5rem; border-bottom:1px solid #eee;">${i.code}</td>
-            <td style="padding:0.5rem; border-bottom:1px solid #eee;">${i.name}</td>
-            <td style="padding:0.5rem; border-bottom:1px solid #eee;">${i.quantity} ${i.unit}</td>
-            <td style="padding:0.5rem; border-bottom:1px solid #eee;">${i.price.toLocaleString()} ₺</td>
-            <td style="padding:0.5rem; border-bottom:1px solid #eee;">%${i.discount}</td>
-            <td style="padding:0.5rem; border-bottom:1px solid #eee;">${lineTotal.toLocaleString()} ₺</td>
-        </tr>`;
-    }).join('');
-
+    let subTotal = wizardState.items.reduce((acc, i) => acc + (i.quantity * i.price * (1 - i.discount / 100)), 0);
+    const hasAnyDiscount = wizardState.items.some(i => i.discount > 0);
     const vat = subTotal * 0.20;
     const grandTotal = subTotal + vat;
+    const firstItem = wizardState.items[0];
+    const globalSymbol = firstItem ? getCurrencySymbol(firstItem.currency) : '₺';
 
     area.innerHTML = `
         <div style="display:flex; justify-content:space-between; margin-bottom:2rem;">
@@ -1827,24 +2107,40 @@ function prepareOfferPreview() {
         <table style="width:100%; border-collapse:collapse; margin-bottom:2rem;">
             <thead>
                 <tr style="background:#f3f4f6;">
+                    <th style="padding:0.5rem; text-align:left;">Resim</th>
                     <th style="text-align:left; padding:0.5rem;">Kod</th>
                     <th style="text-align:left; padding:0.5rem;">Açıklama</th>
                     <th style="text-align:left; padding:0.5rem;">Miktar</th>
                     <th style="text-align:left; padding:0.5rem;">Birim Fiyat</th>
-                    <th style="text-align:left; padding:0.5rem;">İndirim</th>
+                    ${hasAnyDiscount ? '<th style="text-align:left; padding:0.5rem;">İndirim</th>' : ''}
                     <th style="text-align:left; padding:0.5rem;">Toplam</th>
                 </tr>
             </thead>
             <tbody>
-                ${itemsHtml}
+                ${wizardState.items.map(i => {
+        const lineTotal = i.quantity * i.price * (1 - i.discount / 100);
+        const symbol = getCurrencySymbol(i.currency);
+        const imgUrl = i.imageUrl ? (i.imageUrl.startsWith('http') ? i.imageUrl : API_BASE_URL + '/' + i.imageUrl) : '';
+        return `<tr>
+                        <td style="padding:0.5rem; border-bottom:1px solid #eee;">
+                            ${imgUrl ? `<img src="${imgUrl}" style="width:50px; height:50px; object-fit:contain;">` : '-'}
+                        </td>
+                        <td style="padding:0.5rem; border-bottom:1px solid #eee;">${i.code}</td>
+                        <td style="padding:0.5rem; border-bottom:1px solid #eee;">${i.name}</td>
+                        <td style="padding:0.5rem; border-bottom:1px solid #eee;">${i.quantity} ${i.unit}</td>
+                        <td style="padding:0.5rem; border-bottom:1px solid #eee;">${formatMoney(i.price)} ${symbol}</td>
+                        ${hasAnyDiscount ? `<td style="padding:0.5rem; border-bottom:1px solid #eee;">%${i.discount}</td>` : ''}
+                        <td style="padding:0.5rem; border-bottom:1px solid #eee;">${formatMoney(lineTotal)} ${symbol}</td>
+                    </tr>`;
+    }).join('')}
             </tbody>
         </table>
         <div style="display:flex; justify-content:flex-end;">
-            <div style="width:250px;">
-                <div style="display:flex; justify-content:space-between;"><span>Ara Toplam:</span> <span>${subTotal.toLocaleString()} ₺</span></div>
-                <div style="display:flex; justify-content:space-between;"><span>KDV (%20):</span> <span>${vat.toLocaleString()} ₺</span></div>
+            <div style="width:300px;">
+                <div style="display:flex; justify-content:space-between;"><span>Ara Toplam:</span> <span>${formatMoney(subTotal)} ${globalSymbol}</span></div>
+                <div style="display:flex; justify-content:space-between;"><span>KDV (%20):</span> <span>${formatMoney(vat)} ${globalSymbol}</span></div>
                 <div style="display:flex; justify-content:space-between; font-weight:bold; margin-top:0.5rem; border-top:2px solid #333; padding-top:0.5rem;">
-                    <span>GENEL TOPLAM:</span> <span>${grandTotal.toLocaleString()} ₺</span>
+                    <span>GENEL TOPLAM:</span> <span>${formatMoney(grandTotal)} ${globalSymbol}</span>
                 </div>
             </div>
         </div>
@@ -1864,14 +2160,17 @@ window.saveOffer = async function () {
     };
 
     try {
-        const res = await fetch(`${API_BASE_URL}/api/offer`, {
-            method: 'POST',
+        const url = wizardState.offerId ? `${API_BASE_URL}/api/offer/${wizardState.offerId}` : `${API_BASE_URL}/api/offer`;
+        const method = wizardState.offerId ? 'PUT' : 'POST';
+
+        const res = await fetch(url, {
+            method: method,
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(dto)
         });
 
         if (res.ok) {
-            alert('Teklif başarıyla oluşturuldu. ✅');
+            alert(wizardState.offerId ? 'Teklif başarıyla güncellendi. ✅' : 'Teklif başarıyla oluşturuldu. ✅');
             closeModal('offerWizardModal');
             loadOffers();
         } else {
@@ -1890,9 +2189,11 @@ window.downloadOffer = function (type) {
         win.document.close();
         win.print();
     } else {
-        let csv = "Kod,Aciklama,Miktar,Birim Fiyat,Indirim,Toplam\n";
+        const hasAnyDiscount = wizardState.items.some(i => i.discount > 0);
+        let csv = `Resim,Kod,Aciklama,Miktar,Birim Fiyat${hasAnyDiscount ? ',Indirim' : ''},Toplam\n`;
         wizardState.items.forEach(i => {
-            csv += `"${i.code}","${i.name}","${i.quantity}","${i.price}","${i.discount}","${i.quantity * i.price * (1 - i.discount / 100)}"\n`;
+            const imgUrl = i.imageUrl ? (i.imageUrl.startsWith('http') ? i.imageUrl : API_BASE_URL + '/' + i.imageUrl) : '';
+            csv += `\"${imgUrl}\",\"${i.code}\",\"${i.name}\",\"${i.quantity}\",\"${i.price}\"${hasAnyDiscount ? ',\"' + i.discount + '\"' : ''},\"${i.quantity * i.price * (1 - i.discount / 100)}\"\n`;
         });
         const blob = new Blob([csv], { type: 'text/csv' });
         const url = window.URL.createObjectURL(blob);

@@ -39,6 +39,20 @@ namespace S2O1.API.Controllers
             return CreatedAtAction(nameof(GetById), new { id = result.Id }, result);
         }
 
+        [HttpPut("{id}")]
+        public async Task<ActionResult<OfferDto>> Update(int id, [FromBody] CreateOfferDto dto)
+        {
+            try
+            {
+                var result = await _offerService.UpdateAsync(id, dto);
+                return Ok(result);
+            }
+            catch (System.Exception ex)
+            {
+                return BadRequest(ex.Message);
+            }
+        }
+
         [HttpPost("{id}/approve")]
         public async Task<IActionResult> Approve(int id, [FromQuery] int userId)
         {

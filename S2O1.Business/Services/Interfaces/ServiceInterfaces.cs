@@ -75,6 +75,7 @@ namespace S2O1.Business.Services.Interfaces
         Task<IEnumerable<S2O1.Business.DTOs.Stock.OfferDto>> GetAllAsync();
         Task<S2O1.Business.DTOs.Stock.OfferDto> GetByIdAsync(int id);
         Task<S2O1.Business.DTOs.Stock.OfferDto> CreateAsync(S2O1.Business.DTOs.Stock.CreateOfferDto dto);
+        Task<S2O1.Business.DTOs.Stock.OfferDto> UpdateAsync(int id, S2O1.Business.DTOs.Stock.CreateOfferDto dto);
         Task<bool> DeleteAsync(int id);
     }
 

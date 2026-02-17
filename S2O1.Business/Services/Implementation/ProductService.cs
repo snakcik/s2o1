@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 using System.Linq;
 using System.Collections.Generic;
 using Microsoft.EntityFrameworkCore;
+using S2O1.Domain.Enums;
 
 namespace S2O1.Business.Services.Implementation
 {
@@ -29,7 +30,15 @@ namespace S2O1.Business.Services.Implementation
                 .Include(p => p.PriceLists)
                 .FirstOrDefaultAsync(x => x.Id == id);
             if (p == null) return null;
-            return _mapper.Map<ProductDto>(p);
+            
+            var reserved = await _unitOfWork.Repository<OfferItem>().Query()
+                .Include(o => o.Offer)
+                .Where(o => o.ProductId == id && (o.Offer.Status == OfferStatus.Pending || o.Offer.Status == OfferStatus.Approved) && !o.Offer.IsDeleted)
+                .SumAsync(o => o.Quantity);
+
+            var dto = _mapper.Map<ProductDto>(p);
+            dto.ReservedStock = reserved;
+            return dto;
         }
 
         public async Task<ProductDto> CreateAsync(CreateProductDto dto)
@@ -43,6 +52,7 @@ namespace S2O1.Business.Services.Implementation
                 UnitId = dto.UnitId,
                 WarehouseId = dto.WarehouseId,
                 CurrentStock = dto.InitialStock, // Initial stock from user input
+                ImageUrl = dto.ImageUrl,
                 IsActive = true,
                 CreateDate = System.DateTime.Now
             };
@@ -80,7 +90,8 @@ namespace S2O1.Business.Services.Implementation
                 ProductName = product.ProductName,
                 ProductCode = product.ProductCode,
                 WarehouseId = product.WarehouseId,
-                CurrentStock = product.CurrentStock
+                CurrentStock = product.CurrentStock,
+                ImageUrl = product.ImageUrl
             };
         }
         
@@ -91,7 +102,20 @@ namespace S2O1.Business.Services.Implementation
                 .Include(p => p.PriceLists)
                 .Where(p => !p.IsDeleted)
                 .ToListAsync();
-            return _mapper.Map<System.Collections.Generic.IEnumerable<ProductDto>>(products);
+
+            var reserved = await _unitOfWork.Repository<OfferItem>().Query()
+                .Include(o => o.Offer)
+                .Where(o => (o.Offer.Status == OfferStatus.Pending || o.Offer.Status == OfferStatus.Approved) && !o.Offer.IsDeleted)
+                .GroupBy(o => o.ProductId)
+                .Select(g => new { ProductId = g.Key, Reserved = g.Sum(x => x.Quantity) })
+                .ToListAsync();
+
+            var result = _mapper.Map<System.Collections.Generic.IEnumerable<ProductDto>>(products);
+            foreach (var p in result)
+            {
+                p.ReservedStock = reserved.FirstOrDefault(r => r.ProductId == p.Id)?.Reserved ?? 0;
+            }
+            return result;
         }
 
         public async Task<System.Collections.Generic.IEnumerable<S2O1.Business.DTOs.Stock.BrandDto>> GetAllBrandsAsync()
@@ -224,6 +248,7 @@ namespace S2O1.Business.Services.Implementation
             product.BrandId = dto.BrandId;
             product.UnitId = dto.UnitId;
             product.WarehouseId = dto.WarehouseId;
+            product.ImageUrl = dto.ImageUrl;
 
             if (dto.AddedStock > 0)
             {
