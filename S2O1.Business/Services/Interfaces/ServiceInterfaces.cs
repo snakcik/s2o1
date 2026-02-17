@@ -1,6 +1,7 @@
 using S2O1.Business.DTOs.Auth;
 using S2O1.Business.DTOs.Stock;
 using S2O1.Business.DTOs.Invoice;
+using S2O1.Business.DTOs.Business;
 using System.Threading.Tasks;
 
 namespace S2O1.Business.Services.Interfaces
@@ -71,7 +72,10 @@ namespace S2O1.Business.Services.Interfaces
     {
         Task ApproveOfferAsync(int offerId, int approverUserId);
         Task<int> CreateInvoiceFromOfferAsync(int offerId, int userId);
-        Task<IEnumerable<OfferDto>> GetAllAsync(); // Added
+        Task<IEnumerable<S2O1.Business.DTOs.Stock.OfferDto>> GetAllAsync();
+        Task<S2O1.Business.DTOs.Stock.OfferDto> GetByIdAsync(int id);
+        Task<S2O1.Business.DTOs.Stock.OfferDto> CreateAsync(S2O1.Business.DTOs.Stock.CreateOfferDto dto);
+        Task<bool> DeleteAsync(int id);
     }
 
     public interface IInvoiceService
@@ -80,5 +84,40 @@ namespace S2O1.Business.Services.Interfaces
         Task<IEnumerable<InvoiceDto>> GetAllAsync(); // Added
         Task<InvoiceDto> CreateAsync(CreateInvoiceDto dto);
         Task<bool> ApproveInvoiceAsync(int invoiceId, int approverUserId);
+    }
+
+    public interface ISupplierService
+    {
+        Task<IEnumerable<S2O1.Business.DTOs.Business.SupplierDto>> GetAllAsync();
+        Task<S2O1.Business.DTOs.Business.SupplierDto> GetByIdAsync(int id);
+        Task<S2O1.Business.DTOs.Business.SupplierDto> CreateAsync(S2O1.Business.DTOs.Business.CreateSupplierDto dto);
+        Task<S2O1.Business.DTOs.Business.SupplierDto> UpdateAsync(S2O1.Business.DTOs.Business.UpdateSupplierDto dto);
+        Task<bool> DeleteAsync(int id);
+    }
+
+    public interface IPriceListService
+    {
+        Task<IEnumerable<PriceListDto>> GetAllAsync();
+        Task<PriceListDto> GetByIdAsync(int id);
+        Task<PriceListDto> CreateAsync(CreatePriceListDto dto);
+        Task<PriceListDto> UpdateAsync(UpdatePriceListDto dto);
+        Task<bool> DeleteAsync(int id);
+    }
+
+    public interface ICustomerService
+    {
+        // Customer Company
+        Task<IEnumerable<CustomerCompanyDto>> GetAllCompaniesAsync();
+        Task<CustomerCompanyDto> GetCompanyByIdAsync(int id);
+        Task<CustomerCompanyDto> CreateCompanyAsync(CreateCustomerCompanyDto dto);
+        Task<CustomerCompanyDto> UpdateCompanyAsync(UpdateCustomerCompanyDto dto);
+        Task<bool> DeleteCompanyAsync(int id);
+
+        // Customer (Contact)
+        Task<IEnumerable<CustomerDto>> GetAllCustomersAsync();
+        Task<CustomerDto> GetCustomerByIdAsync(int id);
+        Task<CustomerDto> CreateCustomerAsync(CreateCustomerDto dto);
+        Task<CustomerDto> UpdateCustomerAsync(UpdateCustomerDto dto);
+        Task<bool> DeleteCustomerAsync(int id);
     }
 }

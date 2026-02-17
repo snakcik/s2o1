@@ -9,7 +9,9 @@ namespace S2O1.Business.Services.Interfaces
         public int CategoryId { get; set; }
         public int BrandId { get; set; }
         public int UnitId { get; set; }
+        public string UnitName { get; set; }
         public decimal CurrentStock { get; set; }
+        public decimal CurrentPrice { get; set; }
     }
 
     public class CreateProductDto

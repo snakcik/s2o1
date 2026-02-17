@@ -215,6 +215,10 @@ window.switchView = function (viewName) {
         'stock-entry': 'Stok Girişi',
         'reports': 'Raporlar',
         'companies': 'Şirket Yönetimi',
+        'suppliers': 'Tedarikçi Yönetimi',
+        'pricelists': 'Fiyat Listesi Yönetimi',
+        'customer-companies': 'Müşteri Şirket Yönetimi',
+        'customers': 'Müşteri Yönetimi',
         'logs': 'Denetim Kayıtları'
     };
     const titleEl = document.getElementById('pageTitle');
@@ -228,6 +232,10 @@ window.switchView = function (viewName) {
     if (viewName === 'stock-entry') loadStockEntry();
     if (viewName === 'reports') initReportsView();
     if (viewName === 'companies') loadCompanies();
+    if (viewName === 'suppliers') loadSuppliers();
+    if (viewName === 'pricelists') loadPriceLists();
+    if (viewName === 'customer-companies') loadCustomerCompanies();
+    if (viewName === 'customers') loadCustomers();
     if (viewName === 'logs') loadLogs();
 }
 
@@ -334,6 +342,10 @@ window.loadStockReport = async function () {
         if (warehouseId) url += `?warehouseId=${warehouseId}`;
 
         const res = await fetch(url);
+        if (!res.ok) {
+            const text = await res.text();
+            throw new Error(`Sunucu Hatası (${res.status}): ${text || res.statusText}`);
+        }
         const data = await res.json();
 
         tbody.innerHTML = '';
@@ -612,16 +624,16 @@ window.deleteUser = async function (userId, userName) {
 window.loadOffers = async function () {
     const tbody = document.getElementById('offerListBody');
     if (!tbody) return;
-    tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;">Yükleniyor...</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;">Yükleniyor...</td></tr>';
 
     try {
-        const res = await fetch(`${API_BASE_URL}/api/offers`);
+        const res = await fetch(`${API_BASE_URL}/api/offer`);
         if (!res.ok) throw new Error('Teklifler alınamadı');
         const offers = await res.json();
 
         tbody.innerHTML = '';
         if (offers.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;">Teklif bulunamadı.</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;">Teklif bulunamadı.</td></tr>';
             return;
         }
 
@@ -641,16 +653,17 @@ window.loadOffers = async function () {
 
             tr.innerHTML = `
                 <td><strong>${o.offerNumber || '-'}</strong></td>
-                <td>${o.customerId}</td>
+                <td>${o.customerName || o.customerId}</td>
                 <td>${new Date(o.offerDate).toLocaleDateString()}</td>
-                <td>${o.totalAmount} ₺</td>
+                <td>${new Date(o.validUntil).toLocaleDateString()}</td>
+                <td>${o.totalAmount.toLocaleString()} ₺</td>
                 <td>${statusBadge}</td>
                 <td style="text-align:right;">${actions}</td>
             `;
             tbody.appendChild(tr);
         });
     } catch (e) {
-        tbody.innerHTML = '<tr><td colspan="6" style="color:var(--error); text-align:center;">Hata oluştu!</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="7" style="color:var(--error); text-align:center;">Hata oluştu!</td></tr>';
         console.error(e);
     }
 }
@@ -701,19 +714,9 @@ window.loadInvoices = async function () {
 window.approveOffer = async function (id) {
     if (!(await showConfirm('Onay', 'Teklifi onaylamak istiyor musunuz?', 'Onayla', 'İptal'))) return;
     try {
-        const currentUser = JSON.parse(localStorage.getItem('user'));
-        const res = await fetch(`${API_BASE_URL}/api/offers/${id}/approve`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${currentUser.token || ''}` // Assuming token might be needed if JWT is used later, currently cookie/session or handled by headers?
-                // API uses [Authorize] but user provided code doesn't explicitly show JWT token handling in login response.
-                // Assuming cookie authentication or similar if not JWT.
-                // Ah, Login returns user object but NO token in previous code analysis. Hopefully authentication is handled via Cookies or Basic Auth?
-                // Wait, S2O1.API Program.cs uses app.UseAuthorization() but AddAuthentication wasn't explicitly configured with JWT.
-                // If there's no JWT, Authorize attribute might fail if no scheme registered.
-                // But let's stick to current flow.
-            }
+        const user = JSON.parse(localStorage.getItem('user'));
+        const res = await fetch(`${API_BASE_URL}/api/offer/${id}/approve?userId=${user.id}`, {
+            method: 'POST'
         });
         if (res.ok) {
             alert('Teklif onaylandı.');
@@ -727,10 +730,11 @@ window.approveOffer = async function (id) {
 window.createInvoiceFromOffer = async function (id) {
     if (!(await showConfirm('Fatura Oluştur', 'Bu tekliften fatura oluşturulsun mu?', 'Oluştur', 'İptal'))) return;
     try {
-        const res = await fetch(`${API_BASE_URL}/api/offers/${id}/create-invoice`, { method: 'POST' });
+        const user = JSON.parse(localStorage.getItem('user'));
+        const res = await fetch(`${API_BASE_URL}/api/offer/${id}/invoice?userId=${user.id}`, { method: 'POST' });
         if (res.ok) {
-            const data = await res.json();
-            alert('Fatura oluşturuldu. ID: ' + data.invoiceId);
+            const invoiceId = await res.json();
+            alert('Fatura oluşturuldu. ID: ' + invoiceId);
             switchView('invoices');
         } else {
             alert('İşlem başarısız.');
@@ -903,26 +907,13 @@ window.openProductModal = async function (id = null) {
     document.querySelector('#productModal h3').innerText = id ? 'Ürün Düzenle' : 'Yeni Ürün';
     document.getElementById('pId').value = id || '';
 
-    // Clear or Set Values
-    if (!id) {
-        document.getElementById('pCode').value = '';
-        document.getElementById('pName').value = '';
-        document.getElementById('pCategory').value = '';
-        document.getElementById('pBrand').value = '';
-        document.getElementById('pUnit').value = '';
-        document.getElementById('pWarehouse').value = '';
-    } else {
-        // Edit mode
-    }
-
     try {
-        // Load Dropdowns
+        // Load Dropdowns FIRST
         const [cats, brands, units] = await Promise.all([
             fetch(`${API_BASE_URL}/api/product/categories`).then(r => r.json()),
             fetch(`${API_BASE_URL}/api/product/brands`).then(r => r.json()),
             fetch(`${API_BASE_URL}/api/product/units`).then(r => r.json())
         ]);
-
 
         const catSel = document.getElementById('pCategory');
         catSel.innerHTML = '<option value="">Kategori Seç...</option>';
@@ -936,8 +927,9 @@ window.openProductModal = async function (id = null) {
         unitSel.innerHTML = '<option value="">Birim Seç...</option>';
         units.forEach(u => unitSel.innerHTML += `<option value="${u.id}">${u.unitName}</option>`);
 
-        // If Edit Mode, Fetch Product Details and Set Values
+        // THEN Set Values
         if (id) {
+            // Edit Mode - Fetch product details
             const res = await fetch(`${API_BASE_URL}/api/product/${id}`);
             const p = await res.json();
             document.getElementById('pCode').value = p.productCode;
@@ -945,8 +937,16 @@ window.openProductModal = async function (id = null) {
             document.getElementById('pCategory').value = p.categoryId;
             document.getElementById('pBrand').value = p.brandId;
             document.getElementById('pUnit').value = p.unitId;
+            // Warehouse logic if needed
+        } else {
+            // New Mode - Clear fields
+            document.getElementById('pCode').value = '';
+            document.getElementById('pName').value = '';
+            document.getElementById('pCategory').value = '';
+            document.getElementById('pBrand').value = '';
+            document.getElementById('pUnit').value = '';
+            // Warehouse clear if needed
         }
-
     } catch (e) {
         alert('Veriler yüklenirken hata oluştu: ' + e.message);
         console.error(e);
@@ -960,7 +960,6 @@ window.createProduct = async function () {
     const catVal = document.getElementById('pCategory').value;
     const brandVal = document.getElementById('pBrand').value;
     const unitVal = document.getElementById('pUnit').value;
-    const wareVal = document.getElementById('pWarehouse').value;
 
     if (!pName) return alert('Ürün Adı zorunludur.');
     if (!pCode) return alert('Ürün Kodu zorunludur.');
@@ -1261,3 +1260,645 @@ window.deleteSimple = async function (endpoint, id) {
 
 
 
+// SUPPLIERS
+window.loadSuppliers = async function () {
+    const tbody = document.getElementById('supplierListBody');
+    if (!tbody) return;
+    tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;">Yükleniyor...</td></tr>';
+    try {
+        const res = await fetch(`${API_BASE_URL}/api/supplier`);
+        const data = await res.json();
+        tbody.innerHTML = '';
+        if (data.length === 0) { tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;">Kayıt yok.</td></tr>'; return; }
+
+        data.forEach(s => {
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+                <td><strong>${s.supplierCompanyName}</strong></td>
+                <td>${s.supplierContactName || '-'}</td>
+                <td>${s.supplierContactMail || '-'}</td>
+                <td>${s.supplierAddress || '-'}</td>
+                <td style="text-align:right;">
+                    <button class="btn-primary" style="padding:0.25rem 0.5rem; font-size:0.8rem; width:auto; margin-right:0.25rem;" 
+                        onclick="openSupplierModal(${s.id}, \`${s.supplierCompanyName}\`, \`${s.supplierContactName}\`, \`${s.supplierContactMail}\`, \`${s.supplierAddress}\`)">Düzenle</button>
+                    <button class="btn-primary" style="padding:0.25rem 0.5rem; font-size:0.8rem; width:auto; background:var(--error);" 
+                        onclick="deleteSupplier(${s.id}, '${s.supplierCompanyName}')">Sil</button>
+                </td>`;
+            tbody.appendChild(tr);
+        });
+    } catch (e) { console.error(e); tbody.innerHTML = '<tr><td colspan="5" style="color:var(--error); text-align:center;">Hata oluştu!</td></tr>'; }
+}
+
+window.openSupplierModal = function (id, name, contact, mail, addr) {
+    document.getElementById('supplierModal').style.display = 'flex';
+    document.querySelector('#supplierModal h3').innerText = id ? 'Tedarikçi Düzenle' : 'Yeni Tedarikçi';
+    document.getElementById('sId').value = id || '';
+    document.getElementById('sName').value = name || '';
+    document.getElementById('sContact').value = contact || '';
+    document.getElementById('sMail').value = mail || '';
+    document.getElementById('sAddr').value = addr || '';
+}
+
+window.saveSupplier = async function () {
+    const id = document.getElementById('sId').value;
+    const dto = {
+        supplierCompanyName: document.getElementById('sName').value,
+        supplierContactName: document.getElementById('sContact').value,
+        supplierContactMail: document.getElementById('sMail').value,
+        supplierAddress: document.getElementById('sAddr').value
+    };
+    if (id) dto.id = parseInt(id);
+
+    if (!dto.supplierCompanyName) return alert('Şirket adı zorunludur.');
+
+    try {
+        const method = id ? 'PUT' : 'POST';
+        const res = await fetch(`${API_BASE_URL}/api/supplier`, {
+            method: method,
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(dto)
+        });
+
+        if (res.ok) {
+            alert(id ? 'Tedarikçi güncellendi.' : 'Tedarikçi eklendi.');
+            closeModal('supplierModal');
+            loadSuppliers();
+        } else {
+            alert('Hata oluştu.');
+        }
+    } catch (e) { alert(e.message); }
+}
+
+window.deleteSupplier = async function (id, name) {
+    if (!(await showConfirm('Tedarikçi Silme', `"${name}" tedarikçisini silmek istediğinize emin misiniz?`))) return;
+    try {
+        const res = await fetch(`${API_BASE_URL}/api/supplier/${id}`, { method: 'DELETE' });
+        if (res.ok) { alert('Tedarikçi silindi.'); loadSuppliers(); }
+        else alert('Silinemedi.');
+    } catch (e) { alert(e.message); }
+}
+
+// PRICELISTS
+window.loadPriceLists = async function () {
+    const tbody = document.getElementById('priceListBody');
+    if (!tbody) return;
+    tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;">Yükleniyor...</td></tr>';
+    try {
+        const res = await fetch(`${API_BASE_URL}/api/pricelist`);
+        const data = await res.json();
+        tbody.innerHTML = '';
+        if (data.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;">Henüz fiyat kaydı yok.</td></tr>';
+            return;
+        }
+
+        data.forEach(item => {
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+                <td><strong>${item.productCode} - ${item.productName}</strong></td>
+                <td>${item.supplierName || '-'}</td>
+                <td>${item.purchasePrice}</td>
+                <td>${item.salePrice}</td>
+                <td>${item.currency}</td>
+                <td><span class="badge" style="background:${item.isActivePrice ? '#d1fae5;color:#065f46;' : '#f3f4f6; color:#6b7280;'}">${item.isActivePrice ? 'Aktif' : 'Pasif'}</span></td>
+                <td style="text-align:right;">
+                    <button class="btn-primary" style="padding:0.25rem 0.5rem; font-size:0.8rem; width:auto; margin-right:0.25rem;" 
+                        onclick="openPriceListModal(${item.id})">Düzenle</button>
+                    <button class="btn-primary" style="padding:0.25rem 0.5rem; font-size:0.8rem; width:auto; background:var(--error);" 
+                        onclick="deletePriceList(${item.id})">Sil</button>
+                </td>`;
+            tbody.appendChild(tr);
+        });
+    } catch (e) { console.error(e); tbody.innerHTML = '<tr><td colspan="7" style="color:var(--error); text-align:center;">Hata oluştu!</td></tr>'; }
+}
+
+window.openPriceListModal = async function (id = null) {
+    document.getElementById('priceListModal').style.display = 'flex';
+    document.querySelector('#priceListModal h3').innerText = id ? 'Fiyat Düzenle' : 'Yeni Fiyat Kaydı';
+    document.getElementById('plId').value = id || '';
+
+    const pSel = document.getElementById('plProduct');
+    const sSel = document.getElementById('plSupplier');
+
+    pSel.innerHTML = '<option value="">Yükleniyor...</option>';
+    sSel.innerHTML = '<option value="">Yükleniyor...</option>';
+
+    try {
+        const [products, suppliers] = await Promise.all([
+            fetch(`${API_BASE_URL}/api/product`).then(r => r.json()),
+            fetch(`${API_BASE_URL}/api/supplier`).then(r => r.json())
+        ]);
+
+        pSel.innerHTML = '<option value="">Ürün Seçin...</option>';
+        products.forEach(p => pSel.innerHTML += `<option value="${p.id}">${p.productCode} - ${p.productName}</option>`);
+
+        sSel.innerHTML = '<option value="">Tedarikçi Seçin (Opsiyonel)...</option>';
+        suppliers.forEach(s => sSel.innerHTML += `<option value="${s.id}">${s.supplierCompanyName}</option>`);
+
+        if (id) {
+            const res = await fetch(`${API_BASE_URL}/api/pricelist/${id}`);
+            const data = await res.json();
+            document.getElementById('plProduct').value = data.productId;
+            document.getElementById('plSupplier').value = data.supplierId || '';
+            document.getElementById('plPurchasePrice').value = data.purchasePrice;
+            document.getElementById('plSalePrice').value = data.salePrice;
+            document.getElementById('plVat').value = data.vatRate;
+            document.getElementById('plCurrency').value = data.currency;
+            document.getElementById('plIsActive').checked = data.isActivePrice;
+        } else {
+            document.getElementById('plProduct').value = '';
+            document.getElementById('plSupplier').value = '';
+            document.getElementById('plPurchasePrice').value = '';
+            document.getElementById('plSalePrice').value = '';
+            document.getElementById('plVat').value = '20';
+            document.getElementById('plCurrency').value = 'TRY';
+            document.getElementById('plIsActive').checked = true;
+        }
+    } catch (e) { console.error(e); alert('Veriler yüklenemedi!'); }
+}
+
+window.savePriceList = async function () {
+    const id = document.getElementById('plId').value;
+    const dto = {
+        productId: parseInt(document.getElementById('plProduct').value),
+        supplierId: document.getElementById('plSupplier').value ? parseInt(document.getElementById('plSupplier').value) : null,
+        purchasePrice: parseFloat(document.getElementById('plPurchasePrice').value || 0),
+        salePrice: parseFloat(document.getElementById('plSalePrice').value || 0),
+        vatRate: parseInt(document.getElementById('plVat').value || 0),
+        currency: document.getElementById('plCurrency').value,
+        isActivePrice: document.getElementById('plIsActive').checked,
+        discountRate: 0
+    };
+
+    if (!dto.productId) return alert('Lütfen ürün seçiniz.');
+
+    try {
+        const method = id ? 'PUT' : 'POST';
+        if (id) dto.id = parseInt(id);
+
+        const res = await fetch(`${API_BASE_URL}/api/pricelist`, {
+            method: method,
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(dto)
+        });
+
+        if (res.ok) {
+            alert('Fiyat kaydı kaydedildi.');
+            closeModal('priceListModal');
+            loadPriceLists();
+        } else {
+            alert('Hata oluştu.');
+        }
+    } catch (e) { alert(e.message); }
+}
+
+window.deletePriceList = async function (id) {
+    if (!(await showConfirm('Fiyat Silme', 'Bu fiyat kaydını silmek istediğinize emin misiniz?'))) return;
+    try {
+        const res = await fetch(`${API_BASE_URL}/api/pricelist/${id}`, { method: 'DELETE' });
+        if (res.ok) { alert('Fiyat kaydı silindi.'); loadPriceLists(); }
+        else alert('Silinemedi.');
+    } catch (e) { alert(e.message); }
+}
+
+// CUSTOMER COMPANIES
+window.loadCustomerCompanies = async function () {
+    const tbody = document.getElementById('customerCompanyListBody');
+    if (!tbody) return;
+    tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;">Yükleniyor...</td></tr>';
+    try {
+        const res = await fetch(`${API_BASE_URL}/api/customer/companies`);
+        const data = await res.json();
+        tbody.innerHTML = '';
+        if (data.length === 0) { tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;">Kayıt yok.</td></tr>'; return; }
+
+        data.forEach(item => {
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+                <td><strong>${item.customerCompanyName}</strong></td>
+                <td>${item.customerCompanyMail || '-'}</td>
+                <td>${item.customerCompanyAddress || '-'}</td>
+                <td style="text-align:right;">
+                    <button class="btn-primary" style="padding:0.25rem 0.5rem; font-size:0.8rem; width:auto; margin-right:0.25rem;" 
+                        onclick="openCustomerCompanyModal(${item.id}, \`${item.customerCompanyName}\`, \`${item.customerCompanyMail}\`, \`${item.customerCompanyAddress}\`)">Düzenle</button>
+                    <button class="btn-primary" style="padding:0.25rem 0.5rem; font-size:0.8rem; width:auto; background:var(--error);" 
+                        onclick="deleteCustomerCompany(${item.id}, '${item.customerCompanyName}')">Sil</button>
+                </td>`;
+            tbody.appendChild(tr);
+        });
+    } catch (e) { console.error(e); tbody.innerHTML = '<tr><td colspan="4" style="color:var(--error); text-align:center;">Hata oluştu!</td></tr>'; }
+}
+
+window.openCustomerCompanyModal = function (id, name, mail, addr) {
+    document.getElementById('customerCompanyModal').style.display = 'flex';
+    document.querySelector('#customerCompanyModal h3').innerText = id ? 'Müşteri Şirket Düzenle' : 'Yeni Müşteri Şirketi';
+    document.getElementById('ccId').value = id || '';
+    document.getElementById('ccName').value = name || '';
+    document.getElementById('ccMail').value = mail || '';
+    document.getElementById('ccAddr').value = addr || '';
+}
+
+window.saveCustomerCompany = async function () {
+    const id = document.getElementById('ccId').value;
+    const dto = {
+        customerCompanyName: document.getElementById('ccName').value,
+        customerCompanyMail: document.getElementById('ccMail').value,
+        customerCompanyAddress: document.getElementById('ccAddr').value
+    };
+    if (id) dto.id = parseInt(id);
+
+    if (!dto.customerCompanyName) return alert('Şirket adı zorunludur.');
+
+    try {
+        const method = id ? 'PUT' : 'POST';
+        const res = await fetch(`${API_BASE_URL}/api/customer/companies`, {
+            method: method,
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(dto)
+        });
+
+        if (res.ok) {
+            alert('Başarıyla kaydedildi.');
+            closeModal('customerCompanyModal');
+            loadCustomerCompanies();
+        } else alert('Hata oluştu.');
+    } catch (e) { alert(e.message); }
+}
+
+window.deleteCustomerCompany = async function (id, name) {
+    if (!(await showConfirm('Şirket Silme', `"${name}" müşteri şirketini silmek istiyor musunuz?`))) return;
+    try {
+        const res = await fetch(`${API_BASE_URL}/api/customer/companies/${id}`, { method: 'DELETE' });
+        if (res.ok) { alert('Silindi.'); loadCustomerCompanies(); }
+        else alert('Silinemedi.');
+    } catch (e) { alert(e.message); }
+}
+
+// CUSTOMERS (CONTACTS)
+window.loadCustomers = async function () {
+    const tbody = document.getElementById('customerListBody');
+    if (!tbody) return;
+    tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;">Yükleniyor...</td></tr>';
+    try {
+        const res = await fetch(`${API_BASE_URL}/api/customer`);
+        const data = await res.json();
+        tbody.innerHTML = '';
+        if (data.length === 0) { tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;">Kayıt yok.</td></tr>'; return; }
+
+        data.forEach(item => {
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+                <td><strong>${item.customerContactPersonName} ${item.customerContactPersonLastName}</strong></td>
+                <td>${item.customerCompanyName || '-'}</td>
+                <td>${item.customerContactPersonMobilPhone || '-'}</td>
+                <td>${item.customerContactPersonMail || '-'}</td>
+                <td style="text-align:right;">
+                    <button class="btn-primary" style="padding:0.25rem 0.5rem; font-size:0.8rem; width:auto; margin-right:0.25rem;" 
+                        onclick="openCustomerModal(${item.id})">Düzenle</button>
+                    <button class="btn-primary" style="padding:0.25rem 0.5rem; font-size:0.8rem; width:auto; background:var(--error);" 
+                        onclick="deleteCustomer(${item.id}, '${item.customerContactPersonName}')">Sil</button>
+                </td>`;
+            tbody.appendChild(tr);
+        });
+    } catch (e) { console.error(e); tbody.innerHTML = '<tr><td colspan="5" style="color:var(--error); text-align:center;">Hata oluştu!</td></tr>'; }
+}
+
+window.openCustomerModal = async function (id = null) {
+    document.getElementById('customerModal').style.display = 'flex';
+    document.querySelector('#customerModal h3').innerText = id ? 'Müşteri Düzenle' : 'Yeni Müşteri';
+    document.getElementById('custId').value = id || '';
+
+    const compSel = document.getElementById('custCompany');
+    compSel.innerHTML = '<option value="">Yükleniyor...</option>';
+
+    try {
+        console.log("Fetching customer companies...");
+        const res = await fetch(`${API_BASE_URL}/api/customer/companies`);
+        if (!res.ok) throw new Error("Şirket listesi alınamadı: " + res.status);
+        const companies = await res.json();
+        console.log("Companies received:", companies);
+
+        compSel.innerHTML = '<option value="">Şirket Seçin...</option>';
+        if (Array.isArray(companies)) {
+            if (companies.length === 0) {
+                compSel.innerHTML = '<option value="">(Kayıtlı Şirket Yok)</option>';
+            }
+            companies.forEach(c => {
+                compSel.innerHTML += `<option value="${c.id}">${c.customerCompanyName || 'İsimsiz'}</option>`;
+            });
+        }
+
+        if (id) {
+            const resC = await fetch(`${API_BASE_URL}/api/customer/${id}`);
+            const data = await resC.json();
+            document.getElementById('custCompany').value = data.customerCompanyId;
+            document.getElementById('custFirst').value = data.customerContactPersonName;
+            document.getElementById('custLast').value = data.customerContactPersonLastName;
+            document.getElementById('custPhone').value = data.customerContactPersonMobilPhone;
+            document.getElementById('custMail').value = data.customerContactPersonMail;
+        } else {
+            document.getElementById('custFirst').value = '';
+            document.getElementById('custLast').value = '';
+            document.getElementById('custPhone').value = '';
+            document.getElementById('custMail').value = '';
+        }
+    } catch (e) { console.error(e); alert('Şirketler yüklenemedi!'); }
+}
+
+window.saveCustomer = async function () {
+    const id = document.getElementById('custId').value;
+    const dto = {
+        customerCompanyId: parseInt(document.getElementById('custCompany').value),
+        customerContactPersonName: document.getElementById('custFirst').value,
+        customerContactPersonLastName: document.getElementById('custLast').value,
+        customerContactPersonMobilPhone: document.getElementById('custPhone').value,
+        customerContactPersonMail: document.getElementById('custMail').value
+    };
+    if (id) dto.id = parseInt(id);
+
+    if (!dto.customerCompanyId || !dto.customerContactPersonName) return alert('Şirket ve İsim zorunludur.');
+
+    try {
+        const method = id ? 'PUT' : 'POST';
+        const res = await fetch(`${API_BASE_URL}/api/customer`, {
+            method: method,
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(dto)
+        });
+
+        if (res.ok) {
+            alert('Başarıyla kaydedildi.');
+            closeModal('customerModal');
+            loadCustomers();
+        } else alert('Hata oluştu.');
+    } catch (e) { alert(e.message); }
+}
+
+window.deleteCustomer = async function (id, name) {
+    if (!(await showConfirm('Müşteri Silme', `"${name}" müşterisini silmek istiyor musunuz?`))) return;
+    try {
+        const res = await fetch(`${API_BASE_URL}/api/customer/${id}`, { method: 'DELETE' });
+        if (res.ok) { alert('Silindi.'); loadCustomers(); }
+        else alert('Silinemedi.');
+    } catch (e) { alert(e.message); }
+}
+
+// --- OFFER WIZARD LOGIC ---
+let wizardState = {
+    step: 1,
+    items: [], // { id, name, code, quantity, price, discount, unit, stock }
+    customerId: null,
+    warehouseId: null,
+    categoryId: null,
+    customers: [],
+    warehouses: [],
+    categories: []
+};
+
+window.startOfferWizard = async function () {
+    wizardState = { step: 1, items: [], customers: [], warehouses: [], categories: [] };
+    document.getElementById('offerWizardModal').style.display = 'flex';
+    wizardNext(1);
+
+    // Load lists for Step 1
+    const [resCust, resWh, resCat] = await Promise.all([
+        fetch(`${API_BASE_URL}/api/customer`), // Fetch Customers (Contacts) instead of Companies
+        fetch(`${API_BASE_URL}/api/warehouse`),
+        fetch(`${API_BASE_URL}/api/product/categories`)
+    ]);
+
+    wizardState.customers = await resCust.json();
+    wizardState.warehouses = await resWh.json();
+    wizardState.categories = await resCat.json();
+
+    const mSel = document.getElementById('wMusteri');
+    const dSel = document.getElementById('wDepo');
+    const kSel = document.getElementById('wKategori');
+
+    // Display Company Name - Contact Person
+    mSel.innerHTML = '<option value="">Müşteri Seçin...</option>' + wizardState.customers.map(c => `<option value="${c.id}">${c.customerCompanyName} - ${c.fullName || c.customerContactPersonName}</option>`).join('');
+    dSel.innerHTML = '<option value="">Depo Filtresi (Opsiyonel)</option>' + wizardState.warehouses.map(w => `<option value="${w.id}">${w.warehouseName}</option>`).join('');
+    kSel.innerHTML = '<option value="">Kategori Filtresi (Opsiyonel)</option>' + wizardState.categories.map(k => `<option value="${k.id}">${k.categoryName}</option>`).join('');
+}
+
+window.wizardNext = function (step) {
+    if (wizardState.step === 1 && step > 1) {
+        wizardState.customerId = document.getElementById('wMusteri').value;
+        if (!wizardState.customerId) return alert('Lütfen müşteri seçin.');
+        wizardState.warehouseId = document.getElementById('wDepo').value;
+        wizardState.categoryId = document.getElementById('wKategori').value;
+    }
+
+    if (wizardState.step === 2 && step > 2) {
+        if (wizardState.items.length === 0) return alert('Lütfen en az bir ürün ekleyin.');
+    }
+
+    document.querySelectorAll('.wizard-pane').forEach(p => p.style.display = 'none');
+    const targetPane = document.getElementById(`wizard-step-${step}`);
+    if (targetPane) targetPane.style.display = 'block';
+
+    document.querySelectorAll('.step-badge').forEach((b, idx) => {
+        b.classList.toggle('active-step', (idx + 1) === step);
+    });
+
+    wizardState.step = step;
+
+    if (step === 2) loadWizardProducts();
+    if (step === 3) loadWizardPricing();
+    if (step === 4) prepareOfferPreview();
+}
+
+async function loadWizardProducts() {
+    const tbody = document.getElementById('wizardProductList');
+    tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;">Yükleniyor...</td></tr>';
+
+    try {
+        const res = await fetch(`${API_BASE_URL}/api/product`);
+        let products = await res.json();
+        if (wizardState.categoryId) products = products.filter(p => p.categoryId == wizardState.categoryId);
+
+        tbody.innerHTML = '';
+        products.forEach(p => {
+            const tr = document.createElement('tr');
+            // ProductDto fields: currentStock, currentPrice, unitName
+            tr.innerHTML = `
+                <td>${p.productName} <br><small>${p.productCode}</small></td>
+                <td><span class="badge ${p.currentStock > 0 ? 'status-online' : 'status-offline'}" style="background:none; color:inherit;">${p.currentStock || 0}</span></td>
+                <td>${p.unitName || 'Adet'}</td>
+                <td><input type="number" id="qty-${p.id}" value="1" min="1" style="width:60px; padding:0.25rem; border:1px solid #ddd; border-radius:4px;"></td>
+                <td style="text-align:right;">
+                    <button class="btn-primary" style="padding:0.25rem 0.6rem; font-size:0.8rem; width:auto;" 
+                        onclick="addToWizardOffer(${p.id}, '${p.productName.replace(/'/g, "\\'")}', '${p.productCode}', ${p.currentStock || 0}, '${p.unitName || 'Adet'}', ${p.currentPrice || 0})">+</button>
+                </td>
+            `;
+            tbody.appendChild(tr);
+        });
+    } catch (e) { console.error(e); }
+}
+
+window.addToWizardOffer = function (id, name, code, stock, unit, price) {
+    const qtyInput = document.getElementById(`qty-${id}`);
+    const qty = parseFloat(qtyInput.value) || 1;
+    const existing = wizardState.items.find(i => i.id === id);
+    if (existing) {
+        existing.quantity += qty;
+    } else {
+        wizardState.items.push({ id, name, code, quantity: qty, price: price, discount: 0, unit, stock });
+    }
+    alert(`${name} listeye eklendi.`);
+    qtyInput.value = 1; // reset
+}
+
+function loadWizardPricing() {
+    const tbody = document.getElementById('wizardPricingList');
+    tbody.innerHTML = '';
+
+    wizardState.items.forEach(i => {
+        const tr = document.createElement('tr');
+        const netPrice = (i.price * (1 - i.discount / 100)).toFixed(2);
+        tr.innerHTML = `
+            <td><strong>${i.name}</strong><br><small>${i.code}</small></td>
+            <td>${i.quantity} ${i.unit}</td>
+            <td>
+                <div style="font-size:0.75rem; color:var(--muted); margin-bottom:2px;">Liste: ${i.price.toLocaleString()} ₺</div>
+                <input type="number" step="0.01" value="${i.price}" onchange="updateWizardItem(${i.id}, 'price', this.value)" style="width:90px; padding:0.25rem; border:1px solid #ddd; border-radius:4px;">
+                <div style="font-size:0.75rem; color:var(--primary); margin-top:2px;">Net: <span id="net-price-${i.id}">${parseFloat(netPrice).toLocaleString()}</span> ₺</div>
+            </td>
+            <td><input type="number" step="1" value="${i.discount}" onchange="updateWizardItem(${i.id}, 'discount', this.value)" style="width:60px; padding:0.25rem; border:1px solid #ddd; border-radius:4px;"> %</td>
+            <td id="total-${i.id}" style="font-weight:bold;">${(i.quantity * i.price * (1 - i.discount / 100)).toLocaleString()} ₺</td>
+            <td style="text-align:right;"><button class="btn-primary" style="background:var(--error); width:auto; padding:0.25rem 0.5rem;" onclick="removeFromWizardOffer(${i.id})">❌</button></td>
+        `;
+        tbody.appendChild(tr);
+    });
+}
+
+window.updateWizardItem = function (id, field, val) {
+    const item = wizardState.items.find(i => i.id === id);
+    if (item) {
+        item[field] = parseFloat(val) || 0;
+        const totalEl = document.getElementById(`total-${id}`);
+        if (totalEl) {
+            totalEl.innerText = (item.quantity * item.price * (1 - item.discount / 100)).toLocaleString() + ' ₺';
+        }
+        const netPriceEl = document.getElementById(`net-price-${id}`);
+        if (netPriceEl) {
+            netPriceEl.innerText = (item.price * (1 - item.discount / 100)).toLocaleString();
+        }
+    }
+}
+window.removeFromWizardOffer = function (id) {
+    wizardState.items = wizardState.items.filter(i => i.id !== id);
+    loadWizardPricing();
+}
+
+function prepareOfferPreview() {
+    const area = document.getElementById('offerPreviewArea');
+    const customer = wizardState.customers.find(c => c.id == wizardState.customerId);
+
+    let subTotal = 0;
+    let itemsHtml = wizardState.items.map(i => {
+        const lineTotal = i.quantity * i.price * (1 - i.discount / 100);
+        subTotal += lineTotal;
+        return `<tr>
+            <td style="padding:0.5rem; border-bottom:1px solid #eee;">${i.code}</td>
+            <td style="padding:0.5rem; border-bottom:1px solid #eee;">${i.name}</td>
+            <td style="padding:0.5rem; border-bottom:1px solid #eee;">${i.quantity} ${i.unit}</td>
+            <td style="padding:0.5rem; border-bottom:1px solid #eee;">${i.price.toLocaleString()} ₺</td>
+            <td style="padding:0.5rem; border-bottom:1px solid #eee;">%${i.discount}</td>
+            <td style="padding:0.5rem; border-bottom:1px solid #eee;">${lineTotal.toLocaleString()} ₺</td>
+        </tr>`;
+    }).join('');
+
+    const vat = subTotal * 0.20;
+    const grandTotal = subTotal + vat;
+
+    area.innerHTML = `
+        <div style="display:flex; justify-content:space-between; margin-bottom:2rem;">
+            <div>
+                <h2 style="margin:0; color:var(--primary);">TEKLİF FORMU</h2>
+                <p><strong>Firma:</strong> ${customer ? customer.customerCompanyName : 'Seçilmedi'}</p>
+                <p><strong>Yetkili:</strong> ${customer ? (customer.fullName || customer.customerContactPersonName) : '-'}</p>
+            </div>
+            <div style="text-align:right;">
+                <p><strong>Tarih:</strong> ${new Date().toLocaleDateString()}</p>
+                <p><strong>Geçerlilik:</strong> 15 Gün</p>
+            </div>
+        </div>
+        <table style="width:100%; border-collapse:collapse; margin-bottom:2rem;">
+            <thead>
+                <tr style="background:#f3f4f6;">
+                    <th style="text-align:left; padding:0.5rem;">Kod</th>
+                    <th style="text-align:left; padding:0.5rem;">Açıklama</th>
+                    <th style="text-align:left; padding:0.5rem;">Miktar</th>
+                    <th style="text-align:left; padding:0.5rem;">Birim Fiyat</th>
+                    <th style="text-align:left; padding:0.5rem;">İndirim</th>
+                    <th style="text-align:left; padding:0.5rem;">Toplam</th>
+                </tr>
+            </thead>
+            <tbody>
+                ${itemsHtml}
+            </tbody>
+        </table>
+        <div style="display:flex; justify-content:flex-end;">
+            <div style="width:250px;">
+                <div style="display:flex; justify-content:space-between;"><span>Ara Toplam:</span> <span>${subTotal.toLocaleString()} ₺</span></div>
+                <div style="display:flex; justify-content:space-between;"><span>KDV (%20):</span> <span>${vat.toLocaleString()} ₺</span></div>
+                <div style="display:flex; justify-content:space-between; font-weight:bold; margin-top:0.5rem; border-top:2px solid #333; padding-top:0.5rem;">
+                    <span>GENEL TOPLAM:</span> <span>${grandTotal.toLocaleString()} ₺</span>
+                </div>
+            </div>
+        </div>
+    `;
+}
+
+window.saveOffer = async function () {
+    const dto = {
+        customerId: parseInt(wizardState.customerId),
+        validUntil: new Date(Date.now() + 15 * 24 * 60 * 60 * 1000).toISOString(),
+        items: wizardState.items.map(i => ({
+            productId: i.id,
+            quantity: i.quantity,
+            unitPrice: i.price,
+            discountRate: i.discount
+        }))
+    };
+
+    try {
+        const res = await fetch(`${API_BASE_URL}/api/offer`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(dto)
+        });
+
+        if (res.ok) {
+            alert('Teklif başarıyla oluşturuldu. ✅');
+            closeModal('offerWizardModal');
+            loadOffers();
+        } else {
+            const err = await res.text();
+            console.error('Save Offer Error:', err);
+            alert('Teklif Kaydedilemedi! ❌\nDetay: ' + err);
+        }
+    } catch (e) { alert(e.message); }
+}
+
+window.downloadOffer = function (type) {
+    const area = document.getElementById('offerPreviewArea');
+    if (type === 'pdf') {
+        const win = window.open('', '_blank');
+        win.document.write(`<html><head><title>Teklif</title><style>body{font-family:sans-serif; padding:20px;}</style></head><body>${area.innerHTML}</body></html>`);
+        win.document.close();
+        win.print();
+    } else {
+        let csv = "Kod,Aciklama,Miktar,Birim Fiyat,Indirim,Toplam\n";
+        wizardState.items.forEach(i => {
+            csv += `"${i.code}","${i.name}","${i.quantity}","${i.price}","${i.discount}","${i.quantity * i.price * (1 - i.discount / 100)}"\n`;
+        });
+        const blob = new Blob([csv], { type: 'text/csv' });
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `teklif_${new Date().getTime()}.csv`;
+        a.click();
+    }
+}

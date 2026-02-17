@@ -231,7 +231,8 @@ namespace S2O1.Business.Services.Implementation
 
             if (warehouseId.HasValue)
             {
-                query = query.Where(p => p.WarehouseId == warehouseId.Value);
+                var idValue = warehouseId.Value;
+                query = query.Where(p => p.WarehouseId == idValue);
             }
 
             var products = await query.ToListAsync();

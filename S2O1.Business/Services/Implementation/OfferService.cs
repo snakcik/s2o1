@@ -4,6 +4,7 @@ using S2O1.Business.Services.Interfaces;
 using S2O1.Core.Interfaces;
 using S2O1.Domain.Entities;
 using S2O1.Domain.Enums;
+using Microsoft.EntityFrameworkCore;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -95,8 +96,54 @@ namespace S2O1.Business.Services.Implementation
         }
         public async Task<IEnumerable<S2O1.Business.DTOs.Stock.OfferDto>> GetAllAsync()
         {
-            var offers = await _unitOfWork.Repository<Offer>().GetAllAsync();
+            var offers = await _unitOfWork.Repository<Offer>().Query()
+                .Include(x => x.Items)
+                .ThenInclude(i => i.Product)
+                .Include(x => x.Customer)
+                .ThenInclude(c => c.CustomerCompany)
+                .Where(x => !x.IsDeleted)
+                .ToListAsync();
             return _mapper.Map<IEnumerable<S2O1.Business.DTOs.Stock.OfferDto>>(offers);
+        }
+
+        public async Task<S2O1.Business.DTOs.Stock.OfferDto> GetByIdAsync(int id)
+        {
+            var offer = await _unitOfWork.Repository<Offer>().Query()
+                .Include(x => x.Items)
+                .ThenInclude(i => i.Product)
+                .Include(x => x.Customer)
+                .ThenInclude(c => c.CustomerCompany)
+                .FirstOrDefaultAsync(x => x.Id == id && !x.IsDeleted);
+            
+            return _mapper.Map<S2O1.Business.DTOs.Stock.OfferDto>(offer);
+        }
+
+        public async Task<S2O1.Business.DTOs.Stock.OfferDto> CreateAsync(S2O1.Business.DTOs.Stock.CreateOfferDto dto)
+        {
+            var offer = _mapper.Map<Offer>(dto);
+            offer.OfferNumber = "TEK-" + DateTime.Now.Ticks.ToString().Substring(10);
+            offer.OfferDate = DateTime.Now;
+            offer.Status = OfferStatus.Pending;
+            offer.IsActive = true;
+            
+            // Calculate Total
+            offer.TotalAmount = dto.Items.Sum(i => i.Quantity * i.UnitPrice * (1 - i.DiscountRate / 100));
+
+            await _unitOfWork.Repository<Offer>().AddAsync(offer);
+            await _unitOfWork.SaveChangesAsync();
+
+            return await GetByIdAsync(offer.Id);
+        }
+
+        public async Task<bool> DeleteAsync(int id)
+        {
+            var offer = await _unitOfWork.Repository<Offer>().GetByIdAsync(id);
+            if (offer == null) return false;
+
+            offer.IsDeleted = true;
+            _unitOfWork.Repository<Offer>().Update(offer);
+            await _unitOfWork.SaveChangesAsync();
+            return true;
         }
     }
 }

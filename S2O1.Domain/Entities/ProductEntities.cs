@@ -78,6 +78,10 @@ namespace S2O1.Domain.Entities
     {
         public int ProductId { get; set; }
         public Product Product { get; set; }
+        
+        public int? SupplierId { get; set; }
+        public Supplier Supplier { get; set; }
+
         public decimal PurchasePrice { get; set; }
         public decimal SalePrice { get; set; }
         public decimal DiscountRate { get; set; }

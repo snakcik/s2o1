@@ -9,6 +9,7 @@ namespace S2O1.Business.DTOs.Stock // Using Stock for now as mostly related
         public int Id { get; set; }
         public string OfferNumber { get; set; }
         public int CustomerId { get; set; }
+        public string CustomerName { get; set; }
         public DateTime OfferDate { get; set; }
         public DateTime ValidUntil { get; set; }
         public decimal TotalAmount { get; set; }
@@ -17,6 +18,23 @@ namespace S2O1.Business.DTOs.Stock // Using Stock for now as mostly related
     }
 
     public class OfferItemDto
+    {
+        public int ProductId { get; set; }
+        public string ProductName { get; set; }
+        public string ProductCode { get; set; }
+        public decimal Quantity { get; set; }
+        public decimal UnitPrice { get; set; }
+        public decimal DiscountRate { get; set; }
+    }
+
+    public class CreateOfferDto
+    {
+        public int CustomerId { get; set; }
+        public DateTime ValidUntil { get; set; }
+        public List<CreateOfferItemDto> Items { get; set; } = new List<CreateOfferItemDto>();
+    }
+
+    public class CreateOfferItemDto
     {
         public int ProductId { get; set; }
         public decimal Quantity { get; set; }

@@ -21,6 +21,29 @@
             background: #f3f4f6;
             color: var(--primary);
         }
+
+        .step-badge {
+            padding: 0.25rem 0.75rem;
+            border-radius: 20px;
+            background: #e5e7eb;
+            color: #6b7280;
+            font-size: 0.8rem;
+            font-weight: 500;
+        }
+
+        .step-badge.active-step {
+            background: var(--primary);
+            color: white;
+        }
+
+        .form-select {
+            width: 100%;
+            padding: 0.5rem;
+            border: 1px solid #e5e7eb;
+            border-radius: 8px;
+            background: white;
+            font-family: inherit;
+        }
     </style>
 </head>
 
@@ -34,9 +57,18 @@
 
             <div class="menu">
                 <div class="menu-item active" onclick="switchView('dashboard')">🏠 Anasayfa</div>
-                <div class="menu-item" onclick="switchView('companies')">🏢 Şirketler</div>
+                <div class="menu-item" onclick="switchView('companies')">🏢 Firma Tanımları (Bizim)</div>
                 <div class="menu-item" onclick="switchView('inventory')">📦 Stoklar</div>
                 <div class="menu-item" onclick="switchView('stock-entry')">➕ Stok Girişi</div>
+                <div class="menu-item" onclick="switchView('suppliers')">🚚 Tedarikçiler</div>
+                <div class="menu-item" onclick="switchView('pricelists')">💰 Fiyat Listesi</div>
+
+                <div
+                    style="padding: 0.5rem 1rem; font-size: 0.75rem; color: #9ca3af; text-transform: uppercase; letter-spacing: 0.05em; margin-top: 1rem;">
+                    Müşteri Yönetimi</div>
+                <div class="menu-item" onclick="switchView('customer-companies')">🤝 Müşteri Firmaları</div>
+                <div class="menu-item" onclick="switchView('customers')">👥 Müşteri Yetkilileri</div>
+
                 <div class="menu-item" onclick="switchView('offers')">📋 Teklifler</div>
                 <div class="menu-item" onclick="switchView('invoices')">🧾 Faturalar</div>
                 <div class="menu-item" onclick="switchView('reports')">📊 Raporlar</div>
@@ -76,19 +108,11 @@
                                 Yönet</button>
                             <button class="btn-primary" onclick="switchView('stock-entry')"
                                 style="width:auto; background:#10b981;">📦 Stok Girişi Yap</button>
+                            <button class="btn-primary" onclick="startOfferWizard()"
+                                style="width:auto; background:var(--primary);">✨ Teklif Oluştur</button>
                         </div>
                     </div>
 
-                    <div class="glass-card" style="text-align: left;">
-                        <h3>Sistem Durumu</h3>
-                        <div class="status-check" style="justify-content: flex-start; margin-bottom:0.5rem;">
-                            <div class="status-dot status-online"></div>
-                            <span>API Bağlantısı Aktif</span>
-                        </div>
-                        <div id="dashboardSysInfo" style="font-size:0.9rem; color:var(--muted);">
-                            Yükleniyor...
-                        </div>
-                    </div>
                 </div>
             </div>
 
@@ -237,28 +261,6 @@
                 </div>
             </div>
 
-            <!-- SECTION: OFFERS -->
-            <div id="section-offers" class="view-section" style="display:none;">
-                <div class="glass-card" style="padding:0; overflow-x:auto;">
-                    <table class="user-table">
-                        <thead>
-                            <tr>
-                                <th>Teklif No</th>
-                                <th>Müşteri</th>
-                                <th>Tarih</th>
-                                <th>Tutar</th>
-                                <th>Durum</th>
-                                <th style="text-align:right;">İşlemler</th>
-                            </tr>
-                        </thead>
-                        <tbody id="offerListBody">
-                            <tr>
-                                <td colspan="6" style="text-align:center;">Henüz veri yok.</td>
-                            </tr>
-                        </tbody>
-                    </table>
-                </div>
-            </div>
 
             <!-- SECTION: INVOICES -->
             <div id="section-invoices" class="view-section" style="display:none;">
@@ -277,6 +279,139 @@
                         <tbody id="invoiceListBody">
                             <tr>
                                 <td colspan="6" style="text-align:center;">Henüz veri yok.</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- SECTION: SUPPLIERS -->
+            <div id="section-suppliers" class="view-section" style="display:none;">
+                <div style="margin-bottom: 1rem; display:flex; justify-content:flex-end;">
+                    <button class="btn-primary" onclick="openSupplierModal()" style="width: auto;">+ Yeni
+                        Tedarikçi</button>
+                </div>
+                <div class="glass-card" style="padding:0; overflow-x:auto;">
+                    <table class="user-table">
+                        <thead>
+                            <tr>
+                                <th>Şirket Adı</th>
+                                <th>Yetkili</th>
+                                <th>Email</th>
+                                <th>Adres</th>
+                                <th style="text-align:right;">İşlemler</th>
+                            </tr>
+                        </thead>
+                        <tbody id="supplierListBody">
+                            <tr>
+                                <td colspan="5" style="text-align:center;">Yükleniyor...</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- SECTION: PRICELISTS -->
+            <div id="section-pricelists" class="view-section" style="display:none;">
+                <div style="margin-bottom: 1rem; display:flex; justify-content:flex-end;">
+                    <button class="btn-primary" onclick="openPriceListModal()" style="width: auto;">+ Yeni Fiyat
+                        Kaydı</button>
+                </div>
+                <div class="glass-card" style="padding:0; overflow-x:auto;">
+                    <table class="user-table">
+                        <thead>
+                            <tr>
+                                <th>Ürün</th>
+                                <th>Tedarikçi</th>
+                                <th>Alış Fiyatı</th>
+                                <th>Satış Fiyatı</th>
+                                <th>Para Birimi</th>
+                                <th>Durum</th>
+                                <th style="text-align:right;">İşlemler</th>
+                            </tr>
+                        </thead>
+                        <tbody id="priceListBody">
+                            <tr>
+                                <td colspan="7" style="text-align:center;">Yükleniyor...</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- SECTION: CUSTOMER COMPANIES -->
+            <div id="section-customer-companies" class="view-section" style="display:none;">
+                <div style="margin-bottom: 1rem; display:flex; justify-content:flex-end;">
+                    <button class="btn-primary" onclick="openCustomerCompanyModal()" style="width: auto;">+ Yeni Müşteri
+                        Şirketi</button>
+                </div>
+                <div class="glass-card" style="padding:0; overflow-x:auto;">
+                    <table class="user-table">
+                        <thead>
+                            <tr>
+                                <th>Şirket Adı</th>
+                                <th>E-Posta</th>
+                                <th>Adres</th>
+                                <th style="text-align:right;">İşlemler</th>
+                            </tr>
+                        </thead>
+                        <tbody id="customerCompanyListBody">
+                            <tr>
+                                <td colspan="4" style="text-align:center;">Yükleniyor...</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- SECTION: CUSTOMERS -->
+            <div id="section-customers" class="view-section" style="display:none;">
+                <div style="margin-bottom: 1rem; display:flex; justify-content:flex-end;">
+                    <button class="btn-primary" onclick="openCustomerModal()" style="width: auto;">+ Yeni
+                        Müşteri</button>
+                </div>
+                <div class="glass-card" style="padding:0; overflow-x:auto;">
+                    <table class="user-table">
+                        <thead>
+                            <tr>
+                                <th>Ad Soyad</th>
+                                <th>Şirket</th>
+                                <th>Telefon</th>
+                                <th>E-Posta</th>
+                                <th style="text-align:right;">İşlemler</th>
+                            </tr>
+                        </thead>
+                        <tbody id="customerListBody">
+                            <tr>
+                                <td colspan="5" style="text-align:center;">Yükleniyor...</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- SECTION: OFFERS -->
+            <div id="section-offers" class="view-section" style="display:none;">
+                <div style="margin-bottom: 1rem; display:flex; justify-content:flex-end;">
+                    <button class="btn-primary" onclick="startOfferWizard()" style="width: auto;">✨ Teklif
+                        Hazırla</button>
+                </div>
+                <div class="glass-card" style="padding:0; overflow-x:auto;">
+                    <table class="user-table">
+                        <thead>
+                            <tr>
+                                <th>Teklif No</th>
+                                <th>Müşteri</th>
+                                <th>Tarih</th>
+                                <th>Geçerlilik</th>
+                                <th>Toplam Tutar</th>
+                                <th>Durum</th>
+                                <th style="text-align:right;">İşlemler</th>
+                            </tr>
+                        </thead>
+                        <tbody id="offerListBody">
+                            <tr>
+                                <td colspan="7" style="text-align:center;">Yükleniyor...</td>
                             </tr>
                         </tbody>
                     </table>
@@ -387,6 +522,16 @@
 
             <!-- SECTION: SETTINGS -->
             <div id="section-settings" class="view-section" style="display:none;">
+                <div class="glass-card" style="text-align: left; margin-bottom: 2rem;">
+                    <h3>Sistem Durumu</h3>
+                    <div class="status-check" style="justify-content: flex-start; margin-bottom:0.5rem;">
+                        <div class="status-dot status-online"></div>
+                        <span>API Bağlantısı Aktif</span>
+                    </div>
+                    <div id="dashboardSysInfo" style="font-size:0.9rem; color:var(--muted);">
+                        Yükleniyor...
+                    </div>
+                </div>
                 <div class="glass-card" style="text-align: left;">
                     <h3>Sistem Bilgileri</h3>
                     <p><strong>Veritabanı Durumu:</strong> <span id="sysDbStatus">...</span></p>
@@ -423,6 +568,235 @@
                 </div>
             </div>
 
+        </div>
+    </div>
+
+    <!-- PriceList Modal -->
+    <div id="priceListModal" class="modal-overlay"
+        style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); z-index:1000; align-items:center; justify-content:center;">
+        <div class="glass-card" style="max-width:500px; padding:2rem; background:white;">
+            <h3>Fiyat Kaydı</h3>
+            <input type="hidden" id="plId">
+            <div class="form-group">
+                <label>Ürün Seçin</label>
+                <select id="plProduct" style="width:100%; padding:0.5rem; border:1px solid #e5e7eb; border-radius:8px;">
+                    <option value="">Yükleniyor...</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label>Tedarikçi Seçin</label>
+                <select id="plSupplier"
+                    style="width:100%; padding:0.5rem; border:1px solid #e5e7eb; border-radius:8px;">
+                    <option value="">Yükleniyor...</option>
+                </select>
+            </div>
+            <div class="grid" style="grid-template-columns: 1fr 1fr; gap:1rem;">
+                <div class="form-group">
+                    <label>Alış Fiyatı</label>
+                    <input type="number" id="plPurchasePrice" placeholder="0.00" step="0.01">
+                </div>
+                <div class="form-group">
+                    <label>Satış Fiyatı</label>
+                    <input type="number" id="plSalePrice" placeholder="0.00" step="0.01">
+                </div>
+            </div>
+            <div class="grid" style="grid-template-columns: 1fr 1fr; gap:1rem;">
+                <div class="form-group">
+                    <label>KDV (%)</label>
+                    <input type="number" id="plVat" placeholder="20" value="20">
+                </div>
+                <div class="form-group">
+                    <label>Para Birimi</label>
+                    <select id="plCurrency"
+                        style="width:100%; padding:0.5rem; border:1px solid #e5e7eb; border-radius:8px;">
+                        <option value="TRY">TRY</option>
+                        <option value="USD">USD</option>
+                        <option value="EUR">EUR</option>
+                    </select>
+                </div>
+            </div>
+            <div class="form-group" style="display:flex; align-items:center; gap:0.5rem;">
+                <input type="checkbox" id="plIsActive" checked style="width:auto;"> <label for="plIsActive"
+                    style="margin:0;">Aktif Fiyat</label>
+            </div>
+            <div style="display:flex; gap:1rem; margin-top:1rem;">
+                <button class="btn-primary" onclick="savePriceList()">Kaydet</button>
+                <button class="btn-primary" onclick="closeModal('priceListModal')"
+                    style="background:#9ca3af;">İptal</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Customer Company Modal -->
+    <div id="customerCompanyModal" class="modal-overlay"
+        style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); z-index:1000; align-items:center; justify-content:center;">
+        <div class="glass-card" style="max-width:400px; padding:2rem; background:white;">
+            <h3>Müşteri Şirket Bilgileri</h3>
+            <input type="hidden" id="ccId">
+            <div class="form-group"><input type="text" id="ccName" placeholder="Şirket Adı"></div>
+            <div class="form-group"><input type="email" id="ccMail" placeholder="E-Posta"></div>
+            <div class="form-group"><input type="text" id="ccAddr" placeholder="Adres"></div>
+            <div style="display:flex; gap:1rem; margin-top:1rem;">
+                <button class="btn-primary" onclick="saveCustomerCompany()">Kaydet</button>
+                <button class="btn-primary" onclick="closeModal('customerCompanyModal')"
+                    style="background:#9ca3af;">İptal</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Offer Wizard Modal -->
+    <div id="offerWizardModal" class="modal-overlay"
+        style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); z-index:1000; align-items:center; justify-content:center;">
+        <div class="glass-card"
+            style="width: 95%; max-width: 1000px; max-height: 95vh; overflow-y: auto; background: white; padding: 2rem;">
+            <div id="wizardHeader"
+                style="margin-bottom: 2rem; border-bottom: 1px solid #e5e7eb; padding-bottom: 1rem; display:flex; justify-content:space-between; align-items:flex-start;">
+                <div>
+                    <h2 style="margin: 0; color: var(--primary);">✨ Teklif Hazırlama Sihirbazı</h2>
+                    <div id="wizardSteps" style="display: flex; gap: 1rem; margin-top: 1rem;">
+                        <span id="step1-indicator" class="step-badge active-step">1. Filtrele</span>
+                        <span id="step2-indicator" class="step-badge">2. Ürün Seç</span>
+                        <span id="step3-indicator" class="step-badge">3. Fiyatlandır</span>
+                        <span id="step4-indicator" class="step-badge">4. Özet</span>
+                    </div>
+                </div>
+                <button onclick="closeModal('offerWizardModal')"
+                    style="background:#f3f4f6; border:none; border-radius:50%; width:32px; height:32px; font-size:1.2rem; cursor:pointer; color:#6b7280; display:flex; align-items:center; justify-content:center;">&times;</button>
+            </div>
+
+            <!-- Step 1: Filter -->
+            <div id="wizard-step-1" class="wizard-pane">
+                <div class="grid" style="grid-template-columns: 1fr 1fr 1fr; gap: 1rem;">
+                    <div class="form-group">
+                        <label>Müşteri</label>
+                        <select id="wMusteri" class="form-select"></select>
+                    </div>
+                    <div class="form-group">
+                        <label>Depo</label>
+                        <select id="wDepo" class="form-select"></select>
+                    </div>
+                    <div class="form-group">
+                        <label>Kategori</label>
+                        <select id="wKategori" class="form-select"></select>
+                    </div>
+                </div>
+                <div style="margin-top: 2rem; display: flex; justify-content: flex-end; gap: 1rem;">
+                    <button class="btn-primary" style="background:#9ca3af;"
+                        onclick="closeModal('offerWizardModal')">İptal</button>
+                    <button class="btn-primary" onclick="wizardNext(2)">İleri ➡️</button>
+                </div>
+            </div>
+
+            <!-- Step 2: Product Selection -->
+            <div id="wizard-step-2" class="wizard-pane" style="display:none;">
+                <div class="glass-card" style="padding: 0; max-height: 400px; overflow-y: auto; margin-bottom: 1.5rem;">
+                    <table class="user-table">
+                        <thead>
+                            <tr>
+                                <th>Ürün Adı</th>
+                                <th>Stok</th>
+                                <th>Birim</th>
+                                <th>Miktar</th>
+                                <th style="text-align:right;">Ekle</th>
+                            </tr>
+                        </thead>
+                        <tbody id="wizardProductList"></tbody>
+                    </table>
+                </div>
+                <div style="display: flex; justify-content: space-between; gap: 1rem;">
+                    <button class="btn-primary" style="background:#9ca3af;" onclick="wizardNext(1)">⬅️ Geri</button>
+                    <button class="btn-primary" onclick="wizardNext(3)">Fiyatlandırmaya Geç ➡️</button>
+                </div>
+            </div>
+
+            <!-- Step 3: Pricing -->
+            <div id="wizard-step-3" class="wizard-pane" style="display:none;">
+                <div class="glass-card" style="padding: 0; max-height: 400px; overflow-y: auto; margin-bottom: 1.5rem;">
+                    <table class="user-table">
+                        <thead>
+                            <tr>
+                                <th>Ürün</th>
+                                <th>Miktar</th>
+                                <th>Birim Fiyat</th>
+                                <th>İndirim %</th>
+                                <th>Ara Toplam</th>
+                                <th style="text-align:right;">Sil</th>
+                            </tr>
+                        </thead>
+                        <tbody id="wizardPricingList"></tbody>
+                    </table>
+                </div>
+                <div style="display: flex; justify-content: space-between; gap: 1rem;">
+                    <button class="btn-primary" style="background:#9ca3af;" onclick="wizardNext(2)">⬅️ Geri</button>
+                    <button class="btn-primary" onclick="wizardNext(4)">Önizleme ➡️</button>
+                </div>
+            </div>
+
+            <!-- Step 4: Final Preview -->
+            <div id="wizard-step-4" class="wizard-pane" style="display:none;">
+                <div id="offerPreviewArea"
+                    style="background: white; border: 1px solid #e5e7eb; padding: 2rem; border-radius: 8px; margin-bottom: 1.5rem;">
+                </div>
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <div style="display:flex; gap:0.5rem;">
+                        <button class="btn-primary" style="background:#10b981; width:auto;"
+                            onclick="downloadOffer('excel')">📊 Excel İndir</button>
+                        <button class="btn-primary" style="background:#ef4444; width:auto;"
+                            onclick="downloadOffer('pdf')">📕 PDF İndir</button>
+                    </div>
+                    <div style="display:flex; gap:0.5rem;">
+                        <button class="btn-primary" style="background:#9ca3af;" onclick="wizardNext(3)">⬅️ Geri</button>
+                        <button class="btn-primary" onclick="saveOffer()">Teklifi Kaydet ✅</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Customer Modal -->
+    <div id="customerModal" class="modal-overlay"
+        style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); z-index:1000; align-items:center; justify-content:center;">
+        <div class="glass-card" style="max-width:400px; padding:2rem; background:white;">
+            <h3>Müşteri Bilgileri</h3>
+            <input type="hidden" id="custId">
+            <div class="form-group">
+                <label>Şirket Seçin</label>
+                <select id="custCompany"
+                    style="width:100%; padding:0.5rem; border:1px solid #e5e7eb; border-radius:8px;">
+                    <option value="">Yükleniyor...</option>
+                </select>
+                <small style="color:var(--muted); font-size:0.75rem;">Not: Şirket listesi "Müşteri Firmaları" bölümünden
+                    yönetilir.</small>
+            </div>
+            <div class="grid" style="grid-template-columns: 1fr 1fr; gap:1rem;">
+                <div class="form-group"><input type="text" id="custFirst" placeholder="Ad"></div>
+                <div class="form-group"><input type="text" id="custLast" placeholder="Soyad"></div>
+            </div>
+            <div class="form-group"><input type="text" id="custPhone" placeholder="Telefon"></div>
+            <div class="form-group"><input type="email" id="custMail" placeholder="E-Posta"></div>
+            <div style="display:flex; gap:1rem; margin-top:1rem;">
+                <button class="btn-primary" onclick="saveCustomer()">Kaydet</button>
+                <button class="btn-primary" onclick="closeModal('customerModal')"
+                    style="background:#9ca3af;">İptal</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Supplier Modal -->
+    <div id="supplierModal" class="modal-overlay"
+        style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); z-index:1000; align-items:center; justify-content:center;">
+        <div class="glass-card" style="max-width:400px; padding:2rem; background:white;">
+            <h3>Tedarikçi Bilgileri</h3>
+            <input type="hidden" id="sId">
+            <div class="form-group"><input type="text" id="sName" placeholder="Şirket Adı"></div>
+            <div class="form-group"><input type="text" id="sContact" placeholder="Yetkili Kişi"></div>
+            <div class="form-group"><input type="email" id="sMail" placeholder="E-Posta"></div>
+            <div class="form-group"><input type="text" id="sAddr" placeholder="Adres"></div>
+            <div style="display:flex; gap:1rem; margin-top:1rem;">
+                <button class="btn-primary" onclick="saveSupplier()">Kaydet</button>
+                <button class="btn-primary" onclick="closeModal('supplierModal')"
+                    style="background:#9ca3af;">İptal</button>
+            </div>
         </div>
     </div>
 

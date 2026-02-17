@@ -112,7 +112,7 @@ namespace S2O1.Business.Services.Implementation
                      var moveDto = new StockMovementDto
                      {
                          ProductId = item.ProductId,
-                         WarehouseId = product.WarehouseId,
+                         WarehouseId = product.WarehouseId.GetValueOrDefault(),
                          MovementType = MovementType.Exit, // Invoice = Sale = Exit
                          Quantity = item.Quantity,
                          UserId = approverUserId,

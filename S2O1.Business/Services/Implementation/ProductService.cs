@@ -3,6 +3,9 @@ using S2O1.Business.Services.Interfaces;
 using S2O1.Core.Interfaces;
 using S2O1.Domain.Entities;
 using System.Threading.Tasks;
+using System.Linq;
+using System.Collections.Generic;
+using Microsoft.EntityFrameworkCore;
 
 namespace S2O1.Business.Services.Implementation
 {
@@ -21,7 +24,10 @@ namespace S2O1.Business.Services.Implementation
 
         public async Task<ProductDto> GetByIdAsync(int id)
         {
-            var p = await _unitOfWork.Repository<Product>().GetByIdAsync(id);
+            var p = await _unitOfWork.Repository<Product>().Query()
+                .Include(p => p.Unit)
+                .Include(p => p.PriceLists)
+                .FirstOrDefaultAsync(x => x.Id == id);
             if (p == null) return null;
             return _mapper.Map<ProductDto>(p);
         }
@@ -57,7 +63,7 @@ namespace S2O1.Business.Services.Implementation
                     MovementType = S2O1.Domain.Enums.MovementType.Entry,
                     MovementDate = System.DateTime.Now,
                     Description = "Initial Stock Entry",
-                    WarehouseId = dto.WarehouseId,
+                    WarehouseId = dto.WarehouseId.GetValueOrDefault(),
                     CreateDate = System.DateTime.Now,
                     IsActive = true,
                     IsDeleted = false,
@@ -77,9 +83,14 @@ namespace S2O1.Business.Services.Implementation
                 CurrentStock = product.CurrentStock
             };
         }
+        
         public async Task<System.Collections.Generic.IEnumerable<ProductDto>> GetAllAsync()
         {
-            var products = await _unitOfWork.Repository<Product>().FindAsync(p => !p.IsDeleted);
+            var products = await _unitOfWork.Repository<Product>().Query()
+                .Include(p => p.Unit)
+                .Include(p => p.PriceLists)
+                .Where(p => !p.IsDeleted)
+                .ToListAsync();
             return _mapper.Map<System.Collections.Generic.IEnumerable<ProductDto>>(products);
         }
 
@@ -228,7 +239,7 @@ namespace S2O1.Business.Services.Implementation
                     MovementType = S2O1.Domain.Enums.MovementType.Entry,
                     MovementDate = System.DateTime.Now,
                     Description = "Additional Stock Entry (Update)",
-                    WarehouseId = dto.WarehouseId, 
+                    WarehouseId = dto.WarehouseId.GetValueOrDefault(), 
                     CreateDate = System.DateTime.Now,
                     IsActive = true,
                     IsDeleted = false,

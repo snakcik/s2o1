@@ -3,6 +3,7 @@ using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using S2O1.DataAccess.Contexts;
 
@@ -11,9 +12,11 @@ using S2O1.DataAccess.Contexts;
 namespace S2O1.DataAccess.Migrations
 {
     [DbContext(typeof(S2O1DbContext))]
-    partial class S2O1DbContextModelSnapshot : ModelSnapshot
+    [Migration("20260217115821_AddOfferRowVersionConfig")]
+    partial class AddOfferRowVersionConfig
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
