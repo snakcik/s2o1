@@ -19,6 +19,7 @@ namespace S2O1.API.Controllers
         }
 
         [HttpGet]
+        [Filters.Permission("Offers", "Read")]
         public async Task<IActionResult> GetAll()
         {
             var offers = await _offerService.GetAllAsync();
@@ -26,6 +27,7 @@ namespace S2O1.API.Controllers
         }
 
         [HttpPost("{id}/approve")]
+        [Filters.Permission("Offers", "Write")]
         public async Task<IActionResult> ApproveOffer(int id)
         {
             // Get user id from claims
@@ -38,6 +40,7 @@ namespace S2O1.API.Controllers
         }
 
         [HttpPost("{id}/create-invoice")]
+        [Filters.Permission("Offers", "Write")]
         public async Task<IActionResult> CreateInvoice(int id)
         {
             var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier);

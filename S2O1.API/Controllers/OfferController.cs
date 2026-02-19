@@ -11,13 +11,34 @@ namespace S2O1.API.Controllers
     public class OfferController : ControllerBase
     {
         private readonly IOfferService _offerService;
+        private readonly IMailService _mailService;
 
-        public OfferController(IOfferService offerService)
+        public OfferController(IOfferService offerService, IMailService mailService)
         {
             _offerService = offerService;
+            _mailService = mailService;
+        }
+
+        [HttpPost("send-email")]
+        [Filters.Permission("Offers", "Write")]
+        public async Task<IActionResult> SendOfferByEmail([FromBody] SendOfferEmailDto dto)
+        {
+            if (string.IsNullOrEmpty(dto.ToEmail) || string.IsNullOrEmpty(dto.HtmlContent))
+                return BadRequest("Email ve içerik zorunludur.");
+
+            try
+            {
+                await _mailService.SendOfferEmailAsync(dto.ToEmail, dto.Subject ?? "S2O1 Teklif Formu", dto.HtmlContent, "Offer.pdf");
+                return Ok(new { message = "Email başarıyla gönderildi." });
+            }
+            catch (System.Exception ex)
+            {
+                return BadRequest(new { message = "Email gönderilemedi: " + ex.Message });
+            }
         }
 
         [HttpGet]
+        [Filters.Permission("Offers", "Read")]
         public async Task<ActionResult<IEnumerable<OfferDto>>> GetAll()
         {
             var offers = await _offerService.GetAllAsync();
@@ -25,6 +46,7 @@ namespace S2O1.API.Controllers
         }
 
         [HttpGet("{id}")]
+        [Filters.Permission("Offers", "Read")]
         public async Task<ActionResult<OfferDto>> GetById(int id)
         {
             var offer = await _offerService.GetByIdAsync(id);
@@ -33,6 +55,7 @@ namespace S2O1.API.Controllers
         }
 
         [HttpPost]
+        [Filters.Permission("Offers", "Write")]
         public async Task<ActionResult<OfferDto>> Create(CreateOfferDto dto)
         {
             var result = await _offerService.CreateAsync(dto);
@@ -40,6 +63,7 @@ namespace S2O1.API.Controllers
         }
 
         [HttpPut("{id}")]
+        [Filters.Permission("Offers", "Write")]
         public async Task<ActionResult<OfferDto>> Update(int id, [FromBody] CreateOfferDto dto)
         {
             try
@@ -54,6 +78,7 @@ namespace S2O1.API.Controllers
         }
 
         [HttpPost("{id}/approve")]
+        [Filters.Permission("Offers", "Write")]
         public async Task<IActionResult> Approve(int id, [FromQuery] int userId)
         {
             await _offerService.ApproveOfferAsync(id, userId);
@@ -61,6 +86,7 @@ namespace S2O1.API.Controllers
         }
 
         [HttpPost("{id}/invoice")]
+        [Filters.Permission("Offers", "Write")]
         public async Task<ActionResult<int>> CreateInvoice(int id, [FromQuery] int userId)
         {
             var invoiceId = await _offerService.CreateInvoiceFromOfferAsync(id, userId);
@@ -68,6 +94,7 @@ namespace S2O1.API.Controllers
         }
 
         [HttpDelete("{id}")]
+        [Filters.Permission("Offers", "Delete")]
         public async Task<IActionResult> Delete(int id)
         {
             var result = await _offerService.DeleteAsync(id);

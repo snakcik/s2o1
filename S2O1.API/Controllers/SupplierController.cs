@@ -18,6 +18,7 @@ namespace S2O1.API.Controllers
         }
 
         [HttpGet]
+        [Filters.Permission("Supplier", "Read")]
         public async Task<ActionResult<IEnumerable<SupplierDto>>> GetAll()
         {
             var suppliers = await _supplierService.GetAllAsync();
@@ -25,6 +26,7 @@ namespace S2O1.API.Controllers
         }
 
         [HttpGet("{id}")]
+        [Filters.Permission("Supplier", "Read")]
         public async Task<ActionResult<SupplierDto>> GetById(int id)
         {
             var supplier = await _supplierService.GetByIdAsync(id);
@@ -33,6 +35,7 @@ namespace S2O1.API.Controllers
         }
 
         [HttpPost]
+        [Filters.Permission("Supplier", "Write")]
         public async Task<ActionResult<SupplierDto>> Create(CreateSupplierDto dto)
         {
             var result = await _supplierService.CreateAsync(dto);
@@ -40,6 +43,7 @@ namespace S2O1.API.Controllers
         }
 
         [HttpPut]
+        [Filters.Permission("Supplier", "Write")]
         public async Task<ActionResult<SupplierDto>> Update(UpdateSupplierDto dto)
         {
             var result = await _supplierService.UpdateAsync(dto);
@@ -48,6 +52,7 @@ namespace S2O1.API.Controllers
         }
 
         [HttpDelete("{id}")]
+        [Filters.Permission("Supplier", "Delete")]
         public async Task<ActionResult<bool>> Delete(int id)
         {
             var result = await _supplierService.DeleteAsync(id);

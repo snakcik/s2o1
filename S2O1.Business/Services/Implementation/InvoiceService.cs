@@ -8,6 +8,8 @@ using S2O1.Domain.Enums;
 using System;
 using System.Linq;
 using System.Threading.Tasks;
+using Microsoft.EntityFrameworkCore;
+using System.Collections.Generic;
 
 namespace S2O1.Business.Services.Implementation
 {
@@ -58,7 +60,9 @@ namespace S2O1.Business.Services.Implementation
                          UnitPrice = i.UnitPrice,
                          VatRate = i.VatRate,
                          TotalPrice = i.Quantity * i.UnitPrice // simple calculation
-                    }).ToList()
+                    }).ToList(),
+                    SellerCompanyId = dto.SenderCompanyId,
+                    BuyerCompanyId = dto.ReceiverCompanyId
                 };
 
                 // Calculate Totals
@@ -94,54 +98,42 @@ namespace S2O1.Business.Services.Implementation
              using var transaction = await _unitOfWork.BeginTransactionAsync();
              try
              {
-                 var invoice = await _unitOfWork.Repository<Invoice>().GetByIdAsync(invoiceId);
+                 var invoice = await _unitOfWork.Repository<Invoice>().Query()
+                    .Include(i => i.Items).ThenInclude(it => it.Product)
+                    .FirstOrDefaultAsync(i => i.Id == invoiceId);
+
                  if (invoice == null) throw new Exception("Invoice not found");
                  
-                 // Load Items
-                 var items = await _unitOfWork.Repository<InvoiceItem>().FindAsync(i => i.InvoiceId == invoiceId);
-                 invoice.Items = items.ToList();
+                 if (invoice.Status == InvoiceStatus.Approved || invoice.Status == InvoiceStatus.WaitingForWarehouse) return true;
 
-                 if (invoice.Status == InvoiceStatus.Approved) return true;
+                 // Check if it has physical products
+                 bool hasPhysical = invoice.Items.Any(i => i.Product != null && i.Product.IsPhysical);
 
-                 // Decrease Stock for each item
-                 foreach (var item in invoice.Items)
+                 if (hasPhysical)
                  {
-                     // Get Product to find Warehouse
-                     var product = await _unitOfWork.Repository<Product>().GetByIdAsync(item.ProductId);
-                     
-                     var moveDto = new StockMovementDto
-                     {
-                         ProductId = item.ProductId,
-                         WarehouseId = product.WarehouseId.GetValueOrDefault(),
-                         MovementType = MovementType.Exit, // Invoice = Sale = Exit
-                         Quantity = item.Quantity,
-                         UserId = approverUserId,
-                         DocumentNo = invoice.InvoiceNumber,
-                         Description = $"Invoice Approved",
-                         CustomerId = invoice.BuyerCompanyId // Assuming Invoice has BuyerCompanyId filled
-                     };
-
-                     // StockService handles negative stock check and critical alerts
-                     await _stockService.CreateMovementAsync(moveDto);
+                     invoice.Status = InvoiceStatus.WaitingForWarehouse;
+                 }
+                 else
+                 {
+                     invoice.Status = InvoiceStatus.Approved;
                  }
 
-                invoice.Status = InvoiceStatus.Approved;
-                invoice.ApprovedByUserId = approverUserId;
-                _unitOfWork.Repository<Invoice>().Update(invoice);
+                 invoice.ApprovedByUserId = approverUserId;
+                 _unitOfWork.Repository<Invoice>().Update(invoice);
 
-                // If linked to an offer, mark it as Completed
-                if (invoice.OfferId.HasValue)
-                {
-                    var offer = await _unitOfWork.Repository<Offer>().GetByIdAsync(invoice.OfferId.Value);
-                    if (offer != null)
-                    {
-                        offer.Status = OfferStatus.Completed;
-                        _unitOfWork.Repository<Offer>().Update(offer);
-                    }
-                }
-                
-                await _unitOfWork.SaveChangesAsync();
-                await transaction.CommitAsync();
+                 // If linked to an offer, mark it as Completed
+                 if (invoice.OfferId.HasValue)
+                 {
+                     var offer = await _unitOfWork.Repository<Offer>().GetByIdAsync(invoice.OfferId.Value);
+                     if (offer != null)
+                     {
+                         offer.Status = OfferStatus.Completed;
+                         _unitOfWork.Repository<Offer>().Update(offer);
+                     }
+                 }
+                 
+                 await _unitOfWork.SaveChangesAsync();
+                 await transaction.CommitAsync();
                  return true;
              }
              catch
@@ -152,8 +144,114 @@ namespace S2O1.Business.Services.Implementation
         }
         public async Task<System.Collections.Generic.IEnumerable<InvoiceDto>> GetAllAsync()
         {
-            var invoices = await _unitOfWork.Repository<Invoice>().GetAllAsync();
+            var invoices = await _unitOfWork.Repository<Invoice>().Query()
+                .Include(i => i.AssignedDelivererUser)
+                .Include(i => i.Items).ThenInclude(it => it.Product)
+                .ToListAsync();
             return _mapper.Map<System.Collections.Generic.IEnumerable<InvoiceDto>>(invoices);
+        }
+
+        public async Task<System.Collections.Generic.IEnumerable<InvoiceDto>> GetPendingDeliveriesAsync()
+        {
+            var invoices = await _unitOfWork.Repository<Invoice>().Query()
+                .Include(i => i.Items).ThenInclude(it => it.Product).ThenInclude(p => p.Warehouse)
+                .Include(i => i.Items).ThenInclude(it => it.Product).ThenInclude(p => p.Shelf)
+                .Where(i => i.Status == InvoiceStatus.WaitingForWarehouse || i.Status == InvoiceStatus.InPreparation)
+                .ToListAsync();
+            
+            return _mapper.Map<System.Collections.Generic.IEnumerable<InvoiceDto>>(invoices);
+        }
+
+        public async Task<bool> AssignToDelivererAsync(int invoiceId, int userId)
+        {
+            var invoice = await _unitOfWork.Repository<Invoice>().GetByIdAsync(invoiceId);
+            if (invoice == null) return false;
+
+            invoice.Status = InvoiceStatus.InPreparation;
+            invoice.AssignedDelivererUserId = userId;
+            
+            _unitOfWork.Repository<Invoice>().Update(invoice);
+            await _unitOfWork.SaveChangesAsync();
+            return true;
+        }
+
+        public async Task<bool> CompleteDeliveryAsync(WarehouseDeliveryDto dto)
+        {
+            using var transaction = await _unitOfWork.BeginTransactionAsync();
+            try
+            {
+                var invoice = await _unitOfWork.Repository<Invoice>().Query()
+                    .Include(i => i.Items).ThenInclude(it => it.Product).ThenInclude(p => p.Brand)
+                    .Include(i => i.Items).ThenInclude(it => it.Product).ThenInclude(p => p.Unit)
+                    .Include(i => i.SellerCompany)
+                    .Include(i => i.BuyerCompany)
+                    .FirstOrDefaultAsync(i => i.Id == dto.InvoiceId);
+
+                if (invoice == null) throw new Exception("Invoice not found");
+
+                invoice.Status = InvoiceStatus.Delivered;
+                invoice.ReceiverName = dto.ReceiverName;
+                invoice.AssignedDelivererUserId = dto.DelivererUserId;
+                _unitOfWork.Repository<Invoice>().Update(invoice);
+
+                // Create Dispatch Note (İrsaliye)
+                var dispatchNote = new DispatchNote
+                {
+                    DispatchNo = "DN-" + Guid.NewGuid().ToString().Substring(0, 8).ToUpper(),
+                    DispatchDate = DateTime.Now,
+                    CompanyId = invoice.SellerCompanyId,
+                    DelivererUserId = dto.DelivererUserId,
+                    DelivererName = (await _unitOfWork.Repository<User>().GetByIdAsync(dto.DelivererUserId))?.UserFirstName + " " + (await _unitOfWork.Repository<User>().GetByIdAsync(dto.DelivererUserId))?.UserLastName,
+                    ReceiverName = dto.ReceiverName,
+                    Status = "Teslim Edildi",
+                    Note = $"Produced from Invoice {invoice.InvoiceNumber}",
+                    Items = new List<DispatchNoteItem>()
+                };
+
+                foreach (var item in invoice.Items)
+                {
+                    // Update include flag
+                    item.IncludeInDispatch = dto.IncludedItemIds.Contains(item.Id);
+                    _unitOfWork.Repository<InvoiceItem>().Update(item);
+
+                    if (item.Product != null && item.Product.IsPhysical)
+                    {
+                        // 1. Stock Movement EXIT
+                        var moveDto = new StockMovementDto
+                        {
+                            ProductId = item.ProductId,
+                            WarehouseId = item.Product.WarehouseId.GetValueOrDefault(),
+                            MovementType = MovementType.Exit,
+                            Quantity = item.Quantity,
+                            UserId = dto.DelivererUserId,
+                            DocumentNo = invoice.InvoiceNumber,
+                            Description = $"Warehouse Delivery Completed",
+                        };
+                        await _stockService.CreateMovementAsync(moveDto);
+
+                        // 2. Add to Dispatch Note if requested
+                        if (item.IncludeInDispatch)
+                        {
+                            dispatchNote.Items.Add(new DispatchNoteItem
+                            {
+                                ProductId = item.ProductId,
+                                Quantity = item.Quantity,
+                                UnitName = item.Product.Unit?.UnitShortName ?? "Adet"
+                            });
+                        }
+                    }
+                }
+
+                await _unitOfWork.Repository<DispatchNote>().AddAsync(dispatchNote);
+                await _unitOfWork.SaveChangesAsync();
+                await transaction.CommitAsync();
+                return true;
+            }
+            catch
+            {
+                await transaction.RollbackAsync();
+                throw;
+            }
         }
     }
 }

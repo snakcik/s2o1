@@ -50,9 +50,8 @@ namespace S2O1.DataAccess.Repositories
 
         public void Update(T entity)
         {
-            _context.Entry(entity).State = EntityState.Modified;
-            // Ensure UpdatedByUserId handling in Service/UnitOfWork or here?
-            // Repository should be dump usually.
+            _context.Set<T>().Update(entity);
+            // _context.Entry(entity).State = EntityState.Modified; 
         }
 
         public void Remove(T entity)

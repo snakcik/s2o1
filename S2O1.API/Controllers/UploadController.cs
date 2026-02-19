@@ -13,6 +13,7 @@ namespace S2O1.API.Controllers
     public class UploadController : ControllerBase
     {
         [HttpPost]
+        [Filters.Permission("Product", "Write")]
         public async Task<IActionResult> Upload(IFormFile file)
         {
             if (file == null || file.Length == 0)

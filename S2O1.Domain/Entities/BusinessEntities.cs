@@ -79,8 +79,8 @@ namespace S2O1.Domain.Entities
         public int PreparedByUserId { get; set; }
         public User PreparedByUser { get; set; }
         
-        public int ApprovedByUserId { get; set; }
-        public User ApprovedByUser { get; set; }
+        public int? ApprovedByUserId { get; set; }
+        public User? ApprovedByUser { get; set; }
         
         public DateTime IssueDate { get; set; }
         public DateTime DueDate { get; set; }
@@ -90,6 +90,11 @@ namespace S2O1.Domain.Entities
         
         public Guid? EInvoiceUuid { get; set; }
         public InvoiceStatus Status { get; set; }
+
+        // Warehouse related
+        public int? AssignedDelivererUserId { get; set; }
+        public User? AssignedDelivererUser { get; set; }
+        public string? ReceiverName { get; set; }
         
         public ICollection<InvoiceItem> Items { get; set; }
     }
@@ -106,5 +111,6 @@ namespace S2O1.Domain.Entities
         public decimal UnitPrice { get; set; }
         public int VatRate { get; set; }
         public decimal TotalPrice { get; set; }
+        public bool IncludeInDispatch { get; set; } = true;
     }
 }

@@ -28,6 +28,7 @@ namespace S2O1.Business.Services.Implementation
             var p = await _unitOfWork.Repository<Product>().Query()
                 .Include(p => p.Unit)
                 .Include(p => p.PriceLists)
+                .Include(p => p.Shelf)
                 .FirstOrDefaultAsync(x => x.Id == id);
             if (p == null) return null;
             
@@ -53,12 +54,22 @@ namespace S2O1.Business.Services.Implementation
                 WarehouseId = dto.WarehouseId,
                 CurrentStock = dto.InitialStock, // Initial stock from user input
                 ImageUrl = dto.ImageUrl,
+                IsPhysical = dto.IsPhysical,
+                ShelfId = dto.ShelfId,
                 IsActive = true,
                 CreateDate = System.DateTime.Now
             };
 
             await _unitOfWork.Repository<Product>().AddAsync(product);
             await _unitOfWork.SaveChangesAsync();
+
+            // Generate unique product code if warehouse/shelf is provided
+            if (product.WarehouseId.HasValue && product.ShelfId.HasValue)
+            {
+                await GenerateUniqueProductCode(product);
+                _unitOfWork.Repository<Product>().Update(product);
+                await _unitOfWork.SaveChangesAsync();
+            }
 
             // If Initial Stock > 0, Create a Stock Movement Record
             if (dto.InitialStock > 0)
@@ -89,6 +100,7 @@ namespace S2O1.Business.Services.Implementation
                 Id = product.Id,
                 ProductName = product.ProductName,
                 ProductCode = product.ProductCode,
+                SystemCode = product.SystemCode,
                 WarehouseId = product.WarehouseId,
                 CurrentStock = product.CurrentStock,
                 ImageUrl = product.ImageUrl
@@ -100,6 +112,7 @@ namespace S2O1.Business.Services.Implementation
             var products = await _unitOfWork.Repository<Product>().Query()
                 .Include(p => p.Unit)
                 .Include(p => p.PriceLists)
+                .Include(p => p.Shelf)
                 .Where(p => !p.IsDeleted)
                 .ToListAsync();
 
@@ -249,6 +262,8 @@ namespace S2O1.Business.Services.Implementation
             product.UnitId = dto.UnitId;
             product.WarehouseId = dto.WarehouseId;
             product.ImageUrl = dto.ImageUrl;
+            product.IsPhysical = dto.IsPhysical;
+            product.ShelfId = dto.ShelfId;
 
             if (dto.AddedStock > 0)
             {
@@ -274,6 +289,9 @@ namespace S2O1.Business.Services.Implementation
                 await _unitOfWork.Repository<StockMovement>().AddAsync(movement);
             }
 
+            // Update unique code if warehouse/shelf changed
+            await GenerateUniqueProductCode(product);
+
             _unitOfWork.Repository<Product>().Update(product);
             await _unitOfWork.SaveChangesAsync();
 
@@ -289,6 +307,27 @@ namespace S2O1.Business.Services.Implementation
             _unitOfWork.Repository<Product>().Update(product);
             await _unitOfWork.SaveChangesAsync();
             return true;
+        }
+
+        private async Task GenerateUniqueProductCode(Product product)
+        {
+            if (product.WarehouseId.HasValue && product.ShelfId.HasValue)
+            {
+                var warehouse = await _unitOfWork.Repository<Warehouse>().Query()
+                    .Include(w => w.Company)
+                    .FirstOrDefaultAsync(w => w.Id == product.WarehouseId.Value);
+
+                if (warehouse != null)
+                {
+                    // Format: C[CompId]-W[WhId]-S[ShelfId]-P[ProdId]
+                    product.SystemCode = $"C{warehouse.CompanyId}-W{product.WarehouseId}-S{product.ShelfId}-P{product.Id}";
+                }
+            }
+            else
+            {
+                // Fallback for non-warehouse products or products without shelf
+                product.SystemCode = $"P{product.Id}-{System.Guid.NewGuid().ToString().Substring(0, 8).ToUpper()}";
+            }
         }
     }
 }

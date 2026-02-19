@@ -1,0 +1,35 @@
+services:
+  db:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    container_name: s2o1_db
+    environment:
+      - ACCEPT_EULA=Y
+      - MSSQL_SA_PASSWORD=SqlPassword123!
+      - MSSQL_PID=Developer
+    ports:
+      - "1433:1433"
+    volumes:
+      - mssql_data:/var/opt/mssql
+    healthcheck:
+      test: [ "CMD-SHELL", "/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P 'SqlPassword123!' -Q 'SELECT 1' -b -C" ]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+
+  api:
+    image: ${DOCKER_USERNAME:-snakcik}/s2o1:latest
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: s2o1_api
+    ports:
+      - "5267:5267"
+    environment:
+      - ConnectionStrings__DefaultConnection=Server=db;Database=2S1O;User Id=sa;Password=SqlPassword123!;TrustServerCertificate=True;
+      - ASPNETCORE_ENVIRONMENT=Production
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  mssql_data:

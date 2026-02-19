@@ -35,6 +35,11 @@ namespace S2O1.DataAccess.Configurations
                 .WithMany()
                 .HasForeignKey(p => p.WarehouseId)
                 .OnDelete(DeleteBehavior.Restrict);
+
+            builder.HasOne(p => p.Shelf)
+                .WithMany(s => s.Products)
+                .HasForeignKey(p => p.ShelfId)
+                .OnDelete(DeleteBehavior.SetNull);
         }
     }
 

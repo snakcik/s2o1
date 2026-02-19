@@ -25,5 +25,6 @@ namespace S2O1.Business.DTOs.Auth
 
         public int? CreatedByUserId { get; set; } // Kim oluşturuyor? (Admin ID)
         public int? CompanyId { get; set; }
+        public int? TitleId { get; set; }
     }
 }

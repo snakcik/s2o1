@@ -29,6 +29,8 @@ namespace S2O1.Business
             services.AddScoped<ISupplierService, SupplierService>();
             services.AddScoped<IPriceListService, PriceListService>();
             services.AddScoped<ICustomerService, CustomerService>();
+            services.AddScoped<IMailService, MailService>();
+            services.AddScoped<IDispatchNoteService, DispatchNoteService>();
             
             // ICurrentUserService needs to be implemented by Consumer (API/CLI).
 

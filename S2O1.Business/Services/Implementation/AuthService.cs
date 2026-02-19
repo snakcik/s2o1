@@ -7,6 +7,8 @@ using System;
 using System.Threading.Tasks;
 using System.Linq;
 using AutoMapper;
+using Microsoft.EntityFrameworkCore;
+using System.Collections.Generic;
 
 namespace S2O1.Business.Services.Implementation
 {
@@ -15,12 +17,14 @@ namespace S2O1.Business.Services.Implementation
         private readonly IUnitOfWork _unitOfWork;
         private readonly IMapper _mapper;
         private readonly IPasswordHasher _passwordHasher;
+        private readonly IMailService _mailService;
 
-        public AuthService(IUnitOfWork unitOfWork, IMapper mapper, IPasswordHasher passwordHasher)
+        public AuthService(IUnitOfWork unitOfWork, IMapper mapper, IPasswordHasher passwordHasher, IMailService mailService)
         {
             _unitOfWork = unitOfWork;
             _mapper = mapper;
             _passwordHasher = passwordHasher;
+            _mailService = mailService;
         }
 
         public async Task<UserDto?> LoginAsync(LoginDto loginDto)
@@ -38,6 +42,10 @@ namespace S2O1.Business.Services.Implementation
                         var rootDto = _mapper.Map<UserDto>(rootUser);
                         var rootRole = await _unitOfWork.Repository<Role>().GetByIdAsync(rootUser.RoleId);
                         if (rootRole != null) rootDto.Role = rootRole.RoleName;
+                        rootDto.RoleId = rootUser.RoleId;
+                        rootDto.RegNo = rootUser.UserRegNo;
+                        rootDto.QuickActionsJson = rootUser.QuickActionsJson;
+                        rootDto.Permissions = (await GetUserPermissionsAsync(rootUser.Id)).ToList();
                         return rootDto;
                     }
                 }
@@ -48,24 +56,31 @@ namespace S2O1.Business.Services.Implementation
                 .FindAsync(u => u.UserName == loginDto.UserName)).FirstOrDefault();
 
             if (user == null)
+            {
                 return null;
+            }
 
             // Check Password
             if (!_passwordHasher.VerifyPassword(loginDto.Password, user.UserPassword))
-                return null;
+            {
+                 return null;
+            }
             
             var userDto = _mapper.Map<UserDto>(user);
             
             // Get Role
             var role = await _unitOfWork.Repository<Role>().GetByIdAsync(user.RoleId);
             if (role != null) userDto.Role = role.RoleName;
+            userDto.RoleId = user.RoleId;
+            userDto.RegNo = user.UserRegNo;
+            userDto.QuickActionsJson = user.QuickActionsJson;
+            userDto.Permissions = (await GetUserPermissionsAsync(user.Id)).ToList();
 
             return userDto;
         }
 
         public Task<string> GenerateTokenAsync(UserDto user)
         {
-            // Placeholder for JWT or just return a session ID for CLI
             return Task.FromResult(Guid.NewGuid().ToString());
         }
 
@@ -76,13 +91,11 @@ namespace S2O1.Business.Services.Implementation
 
             var role = await _unitOfWork.Repository<Role>().GetByIdAsync(dto.RoleId);
             
-            // SECURITY CHECK: Prevent creating 'root' users
             if (role != null && role.RoleName.Equals("root", StringComparison.OrdinalIgnoreCase))
             {
                 throw new InvalidOperationException("Root rolüne sahip yeni bir kullanıcı oluşturulamaz.");
             }
 
-            // Default to 'User' role (Id=2 usually) if invalid or not provided
             if (role == null) 
             {
                 var roles = await _unitOfWork.Repository<Role>().GetAllAsync();
@@ -99,13 +112,62 @@ namespace S2O1.Business.Services.Implementation
                 UserRegNo = dto.RegNo ?? Guid.NewGuid().ToString().Substring(0, 8),
                 RoleId = role.Id,
                 CreatedByUserId = dto.CreatedByUserId,
-                UserPassword = _passwordHasher.HashPassword(dto.Password),
                 CompanyId = dto.CompanyId,
+                TitleId = dto.TitleId,
                 IsActive = true
             };
 
+            // Check if strong password is required
+            var forceStrongSetting = await _unitOfWork.Repository<SystemSetting>().FindAsync(s => s.SettingKey == "ForceStrongPassword");
+            if (forceStrongSetting.FirstOrDefault()?.SettingValue == "true")
+            {
+                ValidatePasswordStrength(dto.Password);
+            }
+
+            newUser.UserPassword = _passwordHasher.HashPassword(dto.Password);
+
             await _unitOfWork.Repository<User>().AddAsync(newUser);
             await _unitOfWork.SaveChangesAsync();
+
+            // If Admin, grant full permissions to all modules
+            if (role.RoleName.Equals("Admin", StringComparison.OrdinalIgnoreCase))
+            {
+                var modules = await _unitOfWork.Repository<Module>().GetAllAsync();
+                foreach (var module in modules)
+                {
+                    await _unitOfWork.Repository<UserPermission>().AddAsync(new UserPermission
+                    {
+                        UserId = newUser.Id,
+                        ModuleId = module.Id,
+                        CanRead = true,
+                        CanWrite = true,
+                        CanDelete = true,
+                        IsFull = true
+                    });
+                }
+                await _unitOfWork.SaveChangesAsync();
+            }
+            // Apply Title Permissions if exists
+            else if (newUser.TitleId.HasValue)
+            {
+                 var titlePerms = (await _unitOfWork.Repository<TitlePermission>().FindAsync(p => p.TitleId == newUser.TitleId.Value)).ToList();
+                 if (titlePerms.Any())
+                 {
+                     foreach (var tp in titlePerms)
+                     {
+                         await _unitOfWork.Repository<UserPermission>().AddAsync(new UserPermission
+                         {
+                             UserId = newUser.Id,
+                             ModuleId = tp.ModuleId,
+                             CanRead = tp.CanRead,
+                             CanWrite = tp.CanWrite,
+                             CanDelete = tp.CanDelete,
+                             IsFull = tp.IsFull
+                         });
+                    }
+                    await _unitOfWork.SaveChangesAsync();
+                 }
+            }
 
             var result = _mapper.Map<UserDto>(newUser);
             result.Role = role.RoleName;
@@ -120,16 +182,12 @@ namespace S2O1.Business.Services.Implementation
             var role = await _unitOfWork.Repository<Role>().GetByIdAsync(roleId);
             if (role == null) return false;
 
-            // SECURITY CHECK: Prevent assigning 'root' role
             if (role.RoleName.Equals("root", StringComparison.OrdinalIgnoreCase))
             {
-                return false; // Or throw exception
+                return false; 
             }
 
             user.RoleId = roleId;
-            // No direct update method in generic repo usually, entity tracking handles it if fetched via EF
-            // Assuming EF Core Change Tracking works since we fetched it.
-            
             await _unitOfWork.SaveChangesAsync();
             return true;
         }
@@ -138,16 +196,14 @@ namespace S2O1.Business.Services.Implementation
         {
             IEnumerable<User> users;
 
+            var query = _unitOfWork.Repository<User>().Query().Include(u => u.Title).Where(u => !u.IsDeleted);
+
             if (currentUserId.HasValue)
             {
-                // Only users created by this user (excluding deleted)
-                users = await _unitOfWork.Repository<User>().FindAsync(u => u.CreatedByUserId == currentUserId.Value && !u.IsDeleted);
+                query = query.Where(u => u.CreatedByUserId == currentUserId.Value);
             }
-            else
-            {
-                // All users (excluding deleted)
-                users = (await _unitOfWork.Repository<User>().GetAllAsync()).Where(u => !u.IsDeleted);
-            }
+
+            users = await query.ToListAsync();
 
             var dtos = new System.Collections.Generic.List<UserDto>();
             var roles = await _unitOfWork.Repository<Role>().GetAllAsync();
@@ -157,6 +213,9 @@ namespace S2O1.Business.Services.Implementation
                 var dto = _mapper.Map<UserDto>(user);
                 var role = roles.FirstOrDefault(r => r.Id == user.RoleId);
                 dto.Role = role?.RoleName;
+                dto.RoleId = user.RoleId;
+                dto.RegNo = user.UserRegNo;
+                dto.QuickActionsJson = user.QuickActionsJson;
                 dtos.Add(dto);
             }
             return dtos;
@@ -183,7 +242,8 @@ namespace S2O1.Business.Services.Implementation
                    ModuleName = mod.Name,
                    CanRead = perm?.CanRead ?? false,
                    CanWrite = perm?.CanWrite ?? false,
-                   CanDelete = perm?.CanDelete ?? false
+                   CanDelete = perm?.CanDelete ?? false,
+                   IsFull = perm?.IsFull ?? false
                 });
             }
             return result;
@@ -194,14 +254,20 @@ namespace S2O1.Business.Services.Implementation
             var repo = _unitOfWork.Repository<UserPermission>();
             var existingPermissions = (await repo.FindAsync(p => p.UserId == userId)).ToList();
             
-            // Process incoming permissions
             foreach(var dto in permissions)
             {
-                // Logic: Write/Delete implies Read
-                if (dto.CanWrite || dto.CanDelete) dto.CanRead = true;
+                if (dto.IsFull)
+                {
+                    dto.CanRead = true;
+                    dto.CanWrite = true;
+                    dto.CanDelete = true;
+                }
+                else if (dto.CanWrite || dto.CanDelete) 
+                {
+                    dto.CanRead = true;
+                }
                 
-                // Check if all false (no permission) -> Should be removed if exists
-                if(!dto.CanRead && !dto.CanWrite && !dto.CanDelete) 
+                if(!dto.CanRead && !dto.CanWrite && !dto.CanDelete && !dto.IsFull) 
                 {
                     var toRemove = existingPermissions.FirstOrDefault(p => p.ModuleId == dto.ModuleId);
                     if(toRemove != null) repo.Remove(toRemove);
@@ -211,22 +277,21 @@ namespace S2O1.Business.Services.Implementation
                 var existing = existingPermissions.FirstOrDefault(p => p.ModuleId == dto.ModuleId);
                 if (existing != null)
                 {
-                    // Update existing
                     existing.CanRead = dto.CanRead;
                     existing.CanWrite = dto.CanWrite;
                     existing.CanDelete = dto.CanDelete;
-                    // repo.Update(existing); // Usually not needed if tracked, but explicit update is safer if repo supports it
+                    existing.IsFull = dto.IsFull;
                 }
                 else
                 {
-                    // Add new
                     await repo.AddAsync(new UserPermission
                     {
                         UserId = userId,
                         ModuleId = dto.ModuleId,
                         CanRead = dto.CanRead,
                         CanWrite = dto.CanWrite,
-                        CanDelete = dto.CanDelete
+                        CanDelete = dto.CanDelete,
+                        IsFull = dto.IsFull
                     });
                 }
             }
@@ -240,13 +305,11 @@ namespace S2O1.Business.Services.Implementation
             var user = await _unitOfWork.Repository<User>().GetByIdAsync(userId);
             if (user == null) return false;
 
-            // SECURITY CHECK: Prevent deleting root user (ID=1)
             if (user.Id == 1)
             {
                 throw new InvalidOperationException("Root kullanıcısı silinemez.");
             }
 
-            // Soft Delete
             user.IsDeleted = true;
             user.IsActive = false;
 
@@ -259,11 +322,6 @@ namespace S2O1.Business.Services.Implementation
             var user = await _unitOfWork.Repository<User>().GetByIdAsync(userId);
             if (user == null) throw new Exception("User not found.");
 
-            // Prevent editing Root if not Root? 
-            // Rules say Root needs plaintext username verify etc.
-            // For now, allow basic updates.
-            
-            // Check email uniqueness if changed
             if (!string.Equals(user.UserMail, dto.Email, StringComparison.OrdinalIgnoreCase))
             {
                  var existing = (await _unitOfWork.Repository<User>().FindAsync(u => u.UserMail == dto.Email && u.Id != userId)).FirstOrDefault();
@@ -274,12 +332,12 @@ namespace S2O1.Business.Services.Implementation
             user.UserLastName = dto.LastName;
             user.UserMail = dto.Email;
             user.UserRegNo = dto.RegNo;
+            // user.TitleId = dto.TitleId; // Handled below with change detection
             user.IsActive = dto.IsActive;
+            user.QuickActionsJson = dto.QuickActionsJson;
             
-            // Update Role
-            if (user.RoleId != dto.RoleId)
+            if (dto.RoleId > 0 && user.RoleId != dto.RoleId)
             {
-                 // Prevent assigning Root role
                  var newRole = await _unitOfWork.Repository<Role>().GetByIdAsync(dto.RoleId);
                  if (newRole == null) throw new Exception("Invalid Role ID.");
                  if (newRole.RoleName.Equals("root", StringComparison.OrdinalIgnoreCase)) 
@@ -287,7 +345,15 @@ namespace S2O1.Business.Services.Implementation
                  user.RoleId = dto.RoleId;
             }
 
-            // Update Company
+            bool titleChanged = false;
+            // Check title change
+            if (dto.TitleId != user.TitleId)
+            {
+                titleChanged = true;
+                user.TitleId = dto.TitleId;
+            }
+
+
             if (dto.CompanyId.HasValue)
             {
                 var company = await _unitOfWork.Repository<Company>().GetByIdAsync(dto.CompanyId.Value);
@@ -302,10 +368,241 @@ namespace S2O1.Business.Services.Implementation
             _unitOfWork.Repository<User>().Update(user);
             await _unitOfWork.SaveChangesAsync();
 
+            // Apply Title Permissions if changed
+            if (titleChanged && user.TitleId.HasValue)
+            {
+                 // Clear existing permissions
+                 var existingPerms = await _unitOfWork.Repository<UserPermission>().FindAsync(p => p.UserId == userId);
+                 foreach(var ep in existingPerms) _unitOfWork.Repository<UserPermission>().Remove(ep);
+                 
+                 var titlePerms = await _unitOfWork.Repository<TitlePermission>().FindAsync(p => p.TitleId == user.TitleId.Value);
+                 foreach (var tp in titlePerms)
+                 {
+                     await _unitOfWork.Repository<UserPermission>().AddAsync(new UserPermission
+                     {
+                         UserId = userId,
+                         ModuleId = tp.ModuleId,
+                         CanRead = tp.CanRead,
+                         CanWrite = tp.CanWrite,
+                         CanDelete = tp.CanDelete,
+                         IsFull = tp.IsFull
+                     });
+                 }
+                 await _unitOfWork.SaveChangesAsync();
+            }
+
             var result = _mapper.Map<UserDto>(user);
             var role = await _unitOfWork.Repository<Role>().GetByIdAsync(user.RoleId);
             result.Role = role?.RoleName;
             return result;
+        }
+
+        public async Task<bool> ChangePasswordAsync(int userId, ChangePasswordDto dto)
+        {
+            var user = await _unitOfWork.Repository<User>().GetByIdAsync(userId);
+            if (user == null) return false;
+
+            // Verify old password
+            if (!_passwordHasher.VerifyPassword(dto.OldPassword, user.UserPassword))
+            {
+                throw new Exception("Eski şifre hatalı.");
+            }
+
+            // Check if strong password is required
+            var forceStrongSetting = await _unitOfWork.Repository<SystemSetting>().FindAsync(s => s.SettingKey == "ForceStrongPassword");
+            if (forceStrongSetting.FirstOrDefault()?.SettingValue == "true")
+            {
+                ValidatePasswordStrength(dto.NewPassword);
+            }
+
+            // Set new password
+            user.UserPassword = _passwordHasher.HashPassword(dto.NewPassword);
+            
+            _unitOfWork.Repository<User>().Update(user);
+            await _unitOfWork.SaveChangesAsync();
+            return true;
+        }
+
+        public async Task<UserDto?> GetUserByIdAsync(int userId)
+        {
+            var user = await _unitOfWork.Repository<User>().GetByIdAsync(userId);
+            if (user == null) return null;
+
+            var dto = _mapper.Map<UserDto>(user);
+            var role = await _unitOfWork.Repository<Role>().GetByIdAsync(user.RoleId);
+            if (role != null) dto.Role = role.RoleName;
+            dto.RoleId = user.RoleId;
+            dto.RegNo = user.UserRegNo;
+            dto.QuickActionsJson = user.QuickActionsJson;
+            dto.Permissions = (await GetUserPermissionsAsync(user.Id)).ToList();
+            // No password in DTO!
+            return dto;
+        }
+
+        public async Task<bool> ForgotPasswordAsync(string email, string baseUrl)
+        {
+            var user = (await _unitOfWork.Repository<User>().FindAsync(u => u.UserMail == email)).FirstOrDefault();
+            if (user == null) return false; // Don't reveal if user exists for security? Actually, the prompt asks for a reset mail to be sent.
+
+            // Generate a secure token
+            var token = Guid.NewGuid().ToString("N") + Guid.NewGuid().ToString("N");
+            user.PasswordResetToken = token;
+            user.PasswordResetTokenExpires = DateTime.Now.AddHours(1);
+
+            _unitOfWork.Repository<User>().Update(user);
+            await _unitOfWork.SaveChangesAsync();
+
+            var resetLink = $"{baseUrl.TrimEnd('/')}/reset-password.html?token={token}";
+            
+            var emailBody = $@"
+                <div style='font-family: Arial, sans-serif; color: #333; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #ddd; border-radius: 8px;'>
+                    <h2 style='color: #4f46e5;'>Şifre Sıfırlama İsteği</h2>
+                    <p>S2O1 Sistemi için şifre sıfırlama talebinde bulundunuz.</p>
+                    <p>Aşağıdaki butona tıklayarak yeni şifrenizi belirleyebilirsiniz. Bu bağlantı 1 saat süreyle geçerlidir.</p>
+                    <div style='text-align: center; margin: 30px 0;'>
+                        <a href='{resetLink}' style='background-color: #4f46e5; color: white; padding: 12px 25px; text-decoration: none; border-radius: 5px; font-weight: bold;'>Şifremi Sıfırla</a>
+                    </div>
+                    <p>Eğer bu ismi siz yapmadıysanız, lütfen bu e-postayı dikkate almayınız.</p>
+                    <hr style='border: 0; border-top: 1px solid #eee; margin: 20px 0;'>
+                    <p style='font-size: 0.8rem; color: #777;'>Bu e-posta otomatik olarak gönderilmiştir. Lütfen cevaplamayınız.</p>
+                </div>";
+
+            await _mailService.SendEmailAsync(user.UserMail, "S2O1 - Şifre Sıfırlama", emailBody, true);
+            return true;
+        }
+
+        public async Task<bool> ResetPasswordAsync(string token, string newPassword)
+        {
+            if (string.IsNullOrEmpty(token)) return false;
+
+            var user = (await _unitOfWork.Repository<User>().FindAsync(u => u.PasswordResetToken == token && u.PasswordResetTokenExpires > DateTime.Now)).FirstOrDefault();
+            if (user == null) return false;
+
+            // Validate password strength if enabled
+            var forceStrong = await _unitOfWork.Repository<SystemSetting>().FindAsync(s => s.SettingKey == "ForceStrongPassword");
+            if (forceStrong.FirstOrDefault()?.SettingValue == "true")
+            {
+                ValidatePasswordStrength(newPassword);
+            }
+
+            user.UserPassword = _passwordHasher.HashPassword(newPassword);
+            user.PasswordResetToken = null;
+            user.PasswordResetTokenExpires = null;
+
+            _unitOfWork.Repository<User>().Update(user);
+            await _unitOfWork.SaveChangesAsync();
+
+            return true;
+        }
+
+        private void ValidatePasswordStrength(string password)
+        {
+            if (string.IsNullOrEmpty(password) || password.Length < 6)
+                throw new Exception("Şifre en az 6 karakter olmalıdır.");
+
+            bool hasUpper = password.Any(char.IsUpper);
+            bool hasLower = password.Any(char.IsLower);
+            bool hasDigit = password.Any(char.IsDigit);
+
+            if (!hasUpper || !hasLower || !hasDigit)
+                throw new Exception("Şifreniz en az bir büyük harf, bir küçük harf ve bir rakam içermelidir.");
+        }
+
+        // Title Management
+        public async Task<IEnumerable<TitleDto>> GetAllTitlesAsync()
+        {
+            var titles = await _unitOfWork.Repository<Title>().GetAllAsync();
+            return _mapper.Map<IEnumerable<TitleDto>>(titles);
+        }
+
+        public async Task<IEnumerable<TitleDto>> GetTitlesByCompanyAsync(int companyId)
+        {
+            var titles = await _unitOfWork.Repository<Title>().FindAsync(t => t.CompanyId == companyId);
+            return _mapper.Map<IEnumerable<TitleDto>>(titles);
+        }
+
+        public async Task<TitleDto> CreateTitleAsync(CreateTitleDto dto)
+        {
+            var title = _mapper.Map<Title>(dto);
+            await _unitOfWork.Repository<Title>().AddAsync(title);
+            await _unitOfWork.SaveChangesAsync();
+            return _mapper.Map<TitleDto>(title);
+        }
+
+        public async Task<bool> DeleteTitleAsync(int id)
+        {
+            var title = await _unitOfWork.Repository<Title>().GetByIdAsync(id);
+            if (title == null) return false;
+
+            // Check if any user is using this title? 
+            // Better to just soft delete via BaseEntity logic if handled, but here we just remove.
+            _unitOfWork.Repository<Title>().Remove(title);
+            await _unitOfWork.SaveChangesAsync();
+            return true;
+        }
+        public async Task<IEnumerable<TitlePermissionDto>> GetTitlePermissionsAsync(int titleId)
+        {
+            var allModules = await GetAllModulesAsync();
+            var titlePerms = await _unitOfWork.Repository<TitlePermission>().FindAsync(p => p.TitleId == titleId);
+            
+            var result = new System.Collections.Generic.List<TitlePermissionDto>();
+            foreach(var mod in allModules)
+            {
+                var perm = titlePerms.FirstOrDefault(p => p.ModuleId == mod.Id);
+                result.Add(new TitlePermissionDto
+                {
+                   ModuleId = mod.Id,
+                   ModuleName = mod.Name,
+                   CanRead = perm?.CanRead ?? false,
+                   CanWrite = perm?.CanWrite ?? false,
+                   CanDelete = perm?.CanDelete ?? false,
+                   IsFull = perm?.IsFull ?? false
+                });
+            }
+            return result;
+        }
+
+        public async Task<bool> SaveTitlePermissionsAsync(int titleId, IEnumerable<TitlePermissionDto> permissions)
+        {
+            var repo = _unitOfWork.Repository<TitlePermission>();
+            var existingPermissions = (await repo.FindAsync(p => p.TitleId == titleId)).ToList();
+            
+            foreach(var dto in permissions)
+            {
+                if (dto.IsFull) { dto.CanRead = true; dto.CanWrite = true; dto.CanDelete = true; }
+                else if (dto.CanWrite || dto.CanDelete) { dto.CanRead = true; }
+                
+                if(!dto.CanRead && !dto.CanWrite && !dto.CanDelete && !dto.IsFull) 
+                {
+                    var toRemove = existingPermissions.FirstOrDefault(p => p.ModuleId == dto.ModuleId);
+                    if(toRemove != null) repo.Remove(toRemove);
+                    continue;
+                }
+
+                var existing = existingPermissions.FirstOrDefault(p => p.ModuleId == dto.ModuleId);
+                if (existing != null)
+                {
+                    existing.CanRead = dto.CanRead;
+                    existing.CanWrite = dto.CanWrite;
+                    existing.CanDelete = dto.CanDelete;
+                    existing.IsFull = dto.IsFull;
+                }
+                else
+                {
+                    await repo.AddAsync(new TitlePermission
+                    {
+                        TitleId = titleId,
+                        ModuleId = dto.ModuleId,
+                        CanRead = dto.CanRead,
+                        CanWrite = dto.CanWrite,
+                        CanDelete = dto.CanDelete,
+                        IsFull = dto.IsFull
+                    });
+                }
+            }
+            
+            await _unitOfWork.SaveChangesAsync();
+            return true;
         }
     }
 }

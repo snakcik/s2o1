@@ -23,13 +23,31 @@ namespace S2O1.Business.DTOs.Invoice
         public decimal GrandTotal { get; set; }
         public InvoiceStatus Status { get; set; }
         public List<InvoiceItemDto> Items { get; set; }
+        
+        public int? AssignedDelivererUserId { get; set; }
+        public string? AssignedDelivererUserName { get; set; }
+        public string? ReceiverName { get; set; }
     }
 
     public class InvoiceItemDto
     {
+        public int Id { get; set; } // Added for referencing specific item
         public int ProductId { get; set; }
+        public string ProductName { get; set; }
+        public string ProductCode { get; set; }
+        public string WarehouseName { get; set; }
+        public string ShelfName { get; set; }
         public decimal Quantity { get; set; }
         public decimal UnitPrice { get; set; }
         public int VatRate { get; set; }
+        public bool IncludeInDispatch { get; set; }
+    }
+
+    public class WarehouseDeliveryDto
+    {
+        public int InvoiceId { get; set; }
+        public int DelivererUserId { get; set; }
+        public string ReceiverName { get; set; }
+        public List<int> IncludedItemIds { get; set; }
     }
 }

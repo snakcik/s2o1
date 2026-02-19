@@ -11,6 +11,7 @@ namespace S2O1.Domain.Entities
         public int CompanyId { get; set; }
         public Company Company { get; set; }
         public ICollection<ProductLocation> Locations { get; set; }
+        public ICollection<WarehouseShelf> Shelves { get; set; }
         public ICollection<StockMovement> StockMovements { get; set; }
     }
 
@@ -50,6 +51,7 @@ namespace S2O1.Domain.Entities
     {
         public string ProductName { get; set; }
         public string ProductCode { get; set; }
+        public string SystemCode { get; set; }
         
         public int CategoryId { get; set; }
         public Category Category { get; set; }
@@ -65,6 +67,10 @@ namespace S2O1.Domain.Entities
         
         public int? LocationId { get; set; }
         public ProductLocation Location { get; set; }
+        
+        public bool IsPhysical { get; set; } = true;
+        public int? ShelfId { get; set; }
+        public WarehouseShelf Shelf { get; set; }
         
         public decimal CurrentStock { get; set; } // Managed by StockMovement
         public string ImageUrl { get; set; }
@@ -118,6 +124,7 @@ namespace S2O1.Domain.Entities
         public DateTime MovementDate { get; set; }
         
         public string DocumentNo { get; set; }
+        public string? DocumentPath { get; set; }
         public string Description { get; set; }
         
         public int UserId { get; set; }
@@ -128,5 +135,51 @@ namespace S2O1.Domain.Entities
         
         public int? CustomerId { get; set; }
         public Customer Customer { get; set; }
+    }
+
+    public class WarehouseShelf : BaseEntity
+    {
+        public int WarehouseId { get; set; }
+        public Warehouse Warehouse { get; set; }
+        public string Name { get; set; }
+        public string Description { get; set; }
+        public ICollection<Product> Products { get; set; }
+    }
+
+    public class DispatchNote : BaseEntity
+    {
+        public string DispatchNo { get; set; }
+        public DateTime DispatchDate { get; set; }
+        
+        public int CompanyId { get; set; } // Selling Company
+        public Company Company { get; set; }
+        
+        public int? CustomerId { get; set; } // Receiving Customer
+        public Customer Customer { get; set; }
+        
+        // Teslim Eden (Depocu)
+        public int? DelivererUserId { get; set; }
+        public string DelivererName { get; set; }
+        
+        // Teslim Alan (Müşteri veya Temsilci)
+        public int? ReceiverUserId { get; set; }
+        public string ReceiverName { get; set; }
+
+        public string Status { get; set; } // Hazırlanıyor, Teslim Edildi, İptal
+        public string Note { get; set; }
+        
+        public ICollection<DispatchNoteItem> Items { get; set; }
+    }
+
+    public class DispatchNoteItem : BaseEntity
+    {
+        public int DispatchNoteId { get; set; }
+        public DispatchNote DispatchNote { get; set; }
+        
+        public int ProductId { get; set; }
+        public Product Product { get; set; }
+        
+        public decimal Quantity { get; set; }
+        public string UnitName { get; set; }
     }
 }

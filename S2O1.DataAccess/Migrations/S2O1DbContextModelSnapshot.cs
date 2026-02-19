@@ -55,6 +55,9 @@ namespace S2O1.DataAccess.Migrations
                     b.Property<int?>("CreatedByUserId")
                         .HasColumnType("int");
 
+                    b.Property<string>("EntityDisplay")
+                        .HasColumnType("nvarchar(max)");
+
                     b.Property<string>("EntityId")
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
@@ -72,6 +75,12 @@ namespace S2O1.DataAccess.Migrations
 
                     b.Property<bool>("IsDeleted")
                         .HasColumnType("bit");
+
+                    b.Property<string>("NewValues")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("OldValues")
+                        .HasColumnType("nvarchar(max)");
 
                     b.Property<string>("Source")
                         .IsRequired()
@@ -290,6 +299,118 @@ namespace S2O1.DataAccess.Migrations
                     b.ToTable("CustomerCompanies");
                 });
 
+            modelBuilder.Entity("S2O1.Domain.Entities.DispatchNote", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("CompanyId")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("CreateDate")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int?>("CreatedByUserId")
+                        .HasColumnType("int");
+
+                    b.Property<int?>("CustomerId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("DelivererName")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<int?>("DelivererUserId")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("DispatchDate")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("DispatchNo")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("bit");
+
+                    b.Property<string>("Note")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("ReceiverName")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<int?>("ReceiverUserId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<int?>("UpdatedByUserId")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CompanyId");
+
+                    b.HasIndex("CustomerId");
+
+                    b.ToTable("DispatchNotes");
+                });
+
+            modelBuilder.Entity("S2O1.Domain.Entities.DispatchNoteItem", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("CreateDate")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int?>("CreatedByUserId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("DispatchNoteId")
+                        .HasColumnType("int");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("bit");
+
+                    b.Property<int>("ProductId")
+                        .HasColumnType("int");
+
+                    b.Property<decimal>("Quantity")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<string>("UnitName")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<int?>("UpdatedByUserId")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("DispatchNoteId");
+
+                    b.HasIndex("ProductId");
+
+                    b.ToTable("DispatchNoteItems");
+                });
+
             modelBuilder.Entity("S2O1.Domain.Entities.Invoice", b =>
                 {
                     b.Property<int>("Id")
@@ -298,7 +419,10 @@ namespace S2O1.DataAccess.Migrations
 
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
 
-                    b.Property<int>("ApprovedByUserId")
+                    b.Property<int?>("ApprovedByUserId")
+                        .HasColumnType("int");
+
+                    b.Property<int?>("AssignedDelivererUserId")
                         .HasColumnType("int");
 
                     b.Property<int>("BuyerCompanyId")
@@ -338,6 +462,9 @@ namespace S2O1.DataAccess.Migrations
                     b.Property<int>("PreparedByUserId")
                         .HasColumnType("int");
 
+                    b.Property<string>("ReceiverName")
+                        .HasColumnType("nvarchar(max)");
+
                     b.Property<int>("SellerCompanyId")
                         .HasColumnType("int");
 
@@ -353,6 +480,8 @@ namespace S2O1.DataAccess.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("ApprovedByUserId");
+
+                    b.HasIndex("AssignedDelivererUserId");
 
                     b.HasIndex("BuyerCompanyId");
 
@@ -378,6 +507,9 @@ namespace S2O1.DataAccess.Migrations
 
                     b.Property<int?>("CreatedByUserId")
                         .HasColumnType("int");
+
+                    b.Property<bool>("IncludeInDispatch")
+                        .HasColumnType("bit");
 
                     b.Property<int>("InvoiceId")
                         .HasColumnType("int");
@@ -700,6 +832,9 @@ namespace S2O1.DataAccess.Migrations
                     b.Property<bool>("IsDeleted")
                         .HasColumnType("bit");
 
+                    b.Property<bool>("IsPhysical")
+                        .HasColumnType("bit");
+
                     b.Property<int?>("LocationId")
                         .HasColumnType("int");
 
@@ -717,6 +852,13 @@ namespace S2O1.DataAccess.Migrations
                         .ValueGeneratedOnAddOrUpdate()
                         .HasColumnType("rowversion");
 
+                    b.Property<int?>("ShelfId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("SystemCode")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
                     b.Property<int>("UnitId")
                         .HasColumnType("int");
 
@@ -733,6 +875,8 @@ namespace S2O1.DataAccess.Migrations
                     b.HasIndex("CategoryId");
 
                     b.HasIndex("LocationId");
+
+                    b.HasIndex("ShelfId");
 
                     b.HasIndex("UnitId");
 
@@ -924,6 +1068,9 @@ namespace S2O1.DataAccess.Migrations
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
 
+                    b.Property<string>("DocumentPath")
+                        .HasColumnType("nvarchar(max)");
+
                     b.Property<bool>("IsActive")
                         .HasColumnType("bit");
 
@@ -1027,7 +1174,6 @@ namespace S2O1.DataAccess.Migrations
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
 
                     b.Property<string>("AppVersion")
-                        .IsRequired()
                         .HasColumnType("nvarchar(max)");
 
                     b.Property<DateTime>("CreateDate")
@@ -1043,7 +1189,6 @@ namespace S2O1.DataAccess.Migrations
                         .HasColumnType("bit");
 
                     b.Property<string>("LogoAscii")
-                        .IsRequired()
                         .HasColumnType("nvarchar(max)");
 
                     b.Property<string>("SettingKey")
@@ -1099,6 +1244,56 @@ namespace S2O1.DataAccess.Migrations
                     b.ToTable("Titles");
                 });
 
+            modelBuilder.Entity("S2O1.Domain.Entities.TitlePermission", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<bool>("CanDelete")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("CanRead")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("CanWrite")
+                        .HasColumnType("bit");
+
+                    b.Property<DateTime>("CreateDate")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int?>("CreatedByUserId")
+                        .HasColumnType("int");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("IsFull")
+                        .HasColumnType("bit");
+
+                    b.Property<int>("ModuleId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("TitleId")
+                        .HasColumnType("int");
+
+                    b.Property<int?>("UpdatedByUserId")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ModuleId");
+
+                    b.HasIndex("TitleId");
+
+                    b.ToTable("TitlePermissions");
+                });
+
             modelBuilder.Entity("S2O1.Domain.Entities.User", b =>
                 {
                     b.Property<int>("Id")
@@ -1127,6 +1322,15 @@ namespace S2O1.DataAccess.Migrations
 
                     b.Property<DateTime?>("LockoutEnd")
                         .HasColumnType("datetime2");
+
+                    b.Property<string>("PasswordResetToken")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<DateTime?>("PasswordResetTokenExpires")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("QuickActionsJson")
+                        .HasColumnType("nvarchar(max)");
 
                     b.Property<int>("RoleId")
                         .HasColumnType("int");
@@ -1260,6 +1464,9 @@ namespace S2O1.DataAccess.Migrations
                     b.Property<bool>("IsDeleted")
                         .HasColumnType("bit");
 
+                    b.Property<bool>("IsFull")
+                        .HasColumnType("bit");
+
                     b.Property<int>("ModuleId")
                         .HasColumnType("int");
 
@@ -1319,6 +1526,47 @@ namespace S2O1.DataAccess.Migrations
                     b.ToTable("Warehouses");
                 });
 
+            modelBuilder.Entity("S2O1.Domain.Entities.WarehouseShelf", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("CreateDate")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int?>("CreatedByUserId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Description")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("bit");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<int?>("UpdatedByUserId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("WarehouseId")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("WarehouseId");
+
+                    b.ToTable("WarehouseShelves");
+                });
+
             modelBuilder.Entity("S2O1.Domain.Entities.Category", b =>
                 {
                     b.HasOne("S2O1.Domain.Entities.Category", "ParentCategory")
@@ -1339,13 +1587,53 @@ namespace S2O1.DataAccess.Migrations
                     b.Navigation("CustomerCompany");
                 });
 
+            modelBuilder.Entity("S2O1.Domain.Entities.DispatchNote", b =>
+                {
+                    b.HasOne("S2O1.Domain.Entities.Company", "Company")
+                        .WithMany()
+                        .HasForeignKey("CompanyId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("S2O1.Domain.Entities.Customer", "Customer")
+                        .WithMany()
+                        .HasForeignKey("CustomerId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.Navigation("Company");
+
+                    b.Navigation("Customer");
+                });
+
+            modelBuilder.Entity("S2O1.Domain.Entities.DispatchNoteItem", b =>
+                {
+                    b.HasOne("S2O1.Domain.Entities.DispatchNote", "DispatchNote")
+                        .WithMany("Items")
+                        .HasForeignKey("DispatchNoteId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("S2O1.Domain.Entities.Product", "Product")
+                        .WithMany()
+                        .HasForeignKey("ProductId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("DispatchNote");
+
+                    b.Navigation("Product");
+                });
+
             modelBuilder.Entity("S2O1.Domain.Entities.Invoice", b =>
                 {
                     b.HasOne("S2O1.Domain.Entities.User", "ApprovedByUser")
                         .WithMany()
                         .HasForeignKey("ApprovedByUserId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("S2O1.Domain.Entities.User", "AssignedDelivererUser")
+                        .WithMany()
+                        .HasForeignKey("AssignedDelivererUserId");
 
                     b.HasOne("S2O1.Domain.Entities.CustomerCompany", "BuyerCompany")
                         .WithMany()
@@ -1370,6 +1658,8 @@ namespace S2O1.DataAccess.Migrations
                         .IsRequired();
 
                     b.Navigation("ApprovedByUser");
+
+                    b.Navigation("AssignedDelivererUser");
 
                     b.Navigation("BuyerCompany");
 
@@ -1464,6 +1754,11 @@ namespace S2O1.DataAccess.Migrations
                         .WithMany()
                         .HasForeignKey("LocationId");
 
+                    b.HasOne("S2O1.Domain.Entities.WarehouseShelf", "Shelf")
+                        .WithMany("Products")
+                        .HasForeignKey("ShelfId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
                     b.HasOne("S2O1.Domain.Entities.ProductUnit", "Unit")
                         .WithMany()
                         .HasForeignKey("UnitId")
@@ -1480,6 +1775,8 @@ namespace S2O1.DataAccess.Migrations
                     b.Navigation("Category");
 
                     b.Navigation("Location");
+
+                    b.Navigation("Shelf");
 
                     b.Navigation("Unit");
 
@@ -1565,6 +1862,25 @@ namespace S2O1.DataAccess.Migrations
                     b.Navigation("Company");
                 });
 
+            modelBuilder.Entity("S2O1.Domain.Entities.TitlePermission", b =>
+                {
+                    b.HasOne("S2O1.Domain.Entities.Module", "Module")
+                        .WithMany()
+                        .HasForeignKey("ModuleId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("S2O1.Domain.Entities.Title", "Title")
+                        .WithMany("Permissions")
+                        .HasForeignKey("TitleId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Module");
+
+                    b.Navigation("Title");
+                });
+
             modelBuilder.Entity("S2O1.Domain.Entities.User", b =>
                 {
                     b.HasOne("S2O1.Domain.Entities.Company", "Company")
@@ -1630,6 +1946,17 @@ namespace S2O1.DataAccess.Migrations
                     b.Navigation("Company");
                 });
 
+            modelBuilder.Entity("S2O1.Domain.Entities.WarehouseShelf", b =>
+                {
+                    b.HasOne("S2O1.Domain.Entities.Warehouse", "Warehouse")
+                        .WithMany("Shelves")
+                        .HasForeignKey("WarehouseId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Warehouse");
+                });
+
             modelBuilder.Entity("S2O1.Domain.Entities.Category", b =>
                 {
                     b.Navigation("Products");
@@ -1647,6 +1974,11 @@ namespace S2O1.DataAccess.Migrations
             modelBuilder.Entity("S2O1.Domain.Entities.CustomerCompany", b =>
                 {
                     b.Navigation("Customers");
+                });
+
+            modelBuilder.Entity("S2O1.Domain.Entities.DispatchNote", b =>
+                {
+                    b.Navigation("Items");
                 });
 
             modelBuilder.Entity("S2O1.Domain.Entities.Invoice", b =>
@@ -1676,6 +2008,11 @@ namespace S2O1.DataAccess.Migrations
                     b.Navigation("Users");
                 });
 
+            modelBuilder.Entity("S2O1.Domain.Entities.Title", b =>
+                {
+                    b.Navigation("Permissions");
+                });
+
             modelBuilder.Entity("S2O1.Domain.Entities.User", b =>
                 {
                     b.Navigation("ApiKeys");
@@ -1687,7 +2024,14 @@ namespace S2O1.DataAccess.Migrations
                 {
                     b.Navigation("Locations");
 
+                    b.Navigation("Shelves");
+
                     b.Navigation("StockMovements");
+                });
+
+            modelBuilder.Entity("S2O1.Domain.Entities.WarehouseShelf", b =>
+                {
+                    b.Navigation("Products");
                 });
 #pragma warning restore 612, 618
         }

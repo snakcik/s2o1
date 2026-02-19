@@ -48,7 +48,6 @@ builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<ICurrentUserService, ApiCurrentUserService>();
 
 var app = builder.Build();
-
 // Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())
 {
@@ -61,7 +60,11 @@ app.UseCors("AllowAll");
 
 app.UseHttpsRedirection();
 
-// Serve Static Files logic
+// Ensure uploads directory exists
+var uploadsDir = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot", "uploads", "waybills");
+if (!Directory.Exists(uploadsDir)) Directory.CreateDirectory(uploadsDir);
+
+app.UseStaticFiles(); // Serve files from wwwroot (uploads)
 var currentDir = Directory.GetCurrentDirectory();
 // Try different possible locations for 'web' folder
 var possiblePaths = new[] 

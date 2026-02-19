@@ -4,6 +4,8 @@ using S2O1.Core.Interfaces;
 using S2O1.Domain.Entities;
 using System.Collections.Generic;
 using System.Threading.Tasks;
+using Microsoft.EntityFrameworkCore;
+using System.Linq;
 
 namespace S2O1.Business.Services.Implementation
 {
@@ -99,6 +101,44 @@ namespace S2O1.Business.Services.Implementation
             _unitOfWork.Repository<Warehouse>().Update(warehouse);
             await _unitOfWork.SaveChangesAsync();
             return true;
+        }
+
+        public async Task<IEnumerable<WarehouseShelfDto>> GetAllShelvesAsync()
+        {
+            var shelves = await _unitOfWork.Repository<WarehouseShelf>().Query()
+                .Include(s => s.Warehouse)
+                .Where(s => !s.IsDeleted)
+                .ToListAsync();
+            return _mapper.Map<IEnumerable<WarehouseShelfDto>>(shelves);
+        }
+
+        public async Task<IEnumerable<WarehouseShelfDto>> GetShelvesAsync(int warehouseId)
+        {
+            var shelves = await _unitOfWork.Repository<WarehouseShelf>().Query()
+                .Include(s => s.Warehouse)
+                .Where(s => s.WarehouseId == warehouseId && !s.IsDeleted)
+                .ToListAsync();
+            return _mapper.Map<IEnumerable<WarehouseShelfDto>>(shelves);
+        }
+
+        public async Task<WarehouseShelfDto> CreateShelfAsync(CreateWarehouseShelfDto dto)
+        {
+            // Manual mapping or AutoMapper? Using AutoMapper since I configured it.
+            var shelf = _mapper.Map<WarehouseShelf>(dto);
+            await _unitOfWork.Repository<WarehouseShelf>().AddAsync(shelf);
+            await _unitOfWork.SaveChangesAsync();
+            return _mapper.Map<WarehouseShelfDto>(shelf);
+        }
+
+        public async Task<bool> DeleteShelfAsync(int id)
+        {
+             var shelf = await _unitOfWork.Repository<WarehouseShelf>().GetByIdAsync(id);
+             if (shelf == null) return false;
+             
+             shelf.IsDeleted = true;
+             _unitOfWork.Repository<WarehouseShelf>().Update(shelf);
+             await _unitOfWork.SaveChangesAsync();
+             return true;
         }
     }
 }

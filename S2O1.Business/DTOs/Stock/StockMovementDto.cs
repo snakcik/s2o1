@@ -12,6 +12,7 @@ namespace S2O1.Business.DTOs.Stock
         public MovementType MovementType { get; set; }
         public decimal Quantity { get; set; }
         public string DocumentNo { get; set; }
+        public string? DocumentPath { get; set; }
         public string Description { get; set; }
         public int UserId { get; set; } // Current User
         public int? SupplierId { get; set; }
@@ -41,5 +42,15 @@ namespace S2O1.Business.DTOs.Stock
                 .When(x => x.MovementType == MovementType.Exit)
                 .WithMessage("Customer is required for Exit.");
         }
+    }
+
+    public class WaybillDto
+    {
+        public string WaybillNo { get; set; }
+        public DateTime Date { get; set; }
+        public string SupplierName { get; set; }
+        public string Description { get; set; }
+        public string DocumentPath { get; set; }
+        public decimal TotalQuantity { get; set; }
     }
 }

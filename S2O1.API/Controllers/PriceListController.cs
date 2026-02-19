@@ -18,6 +18,7 @@ namespace S2O1.API.Controllers
         }
 
         [HttpGet]
+        [Filters.Permission("PriceList", "Read")]
         public async Task<ActionResult<IEnumerable<PriceListDto>>> GetAll()
         {
             var data = await _priceListService.GetAllAsync();
@@ -25,6 +26,7 @@ namespace S2O1.API.Controllers
         }
 
         [HttpGet("{id}")]
+        [Filters.Permission("PriceList", "Read")]
         public async Task<ActionResult<PriceListDto>> GetById(int id)
         {
             var result = await _priceListService.GetByIdAsync(id);
@@ -33,6 +35,7 @@ namespace S2O1.API.Controllers
         }
 
         [HttpPost]
+        [Filters.Permission("PriceList", "Write")]
         public async Task<ActionResult<PriceListDto>> Create(CreatePriceListDto dto)
         {
             var result = await _priceListService.CreateAsync(dto);
@@ -40,6 +43,7 @@ namespace S2O1.API.Controllers
         }
 
         [HttpPut]
+        [Filters.Permission("PriceList", "Write")]
         public async Task<ActionResult<PriceListDto>> Update(UpdatePriceListDto dto)
         {
             var result = await _priceListService.UpdateAsync(dto);
@@ -48,6 +52,7 @@ namespace S2O1.API.Controllers
         }
 
         [HttpDelete("{id}")]
+        [Filters.Permission("PriceList", "Delete")]
         public async Task<ActionResult<bool>> Delete(int id)
         {
             var result = await _priceListService.DeleteAsync(id);

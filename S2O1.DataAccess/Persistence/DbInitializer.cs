@@ -28,12 +28,13 @@ namespace S2O1.DataAccess.Persistence
             var passwordHasher = provider.GetRequiredService<IPasswordHasher>();
             var initializer = new DbInitializer(context, passwordHasher);
             
-            // Scan Business and API assemblies for modules/controllers if available
+            // Scan relevant assemblies for modules
             var assemblies = new List<Assembly>();
-            // Add Business, API etc. if loaded. For now just Executing (DataAccess) or Entry (CLI/API)?
-            // Modules are likely Controllers in API or Services in Business.
-            // Let's pass entry assembly.
             if (Assembly.GetEntryAssembly() != null) assemblies.Add(Assembly.GetEntryAssembly());
+            
+            // Add Domain assembly to scan for Entities
+            var domainAssembly = typeof(S2O1.Domain.Common.BaseEntity).Assembly;
+            assemblies.Add(domainAssembly);
             
             await initializer.InitializeAsync(assemblies);
         }
@@ -102,41 +103,58 @@ namespace S2O1.DataAccess.Persistence
         {
             if (!await _context.SystemSettings.AnyAsync())
             {
-                var settings = new SystemSetting
+                var settings = new List<SystemSetting>
                 {
-                    SettingKey = "CLI_Welcome_Message",
-                    SettingValue = "2S1O - Warehouse Management System [v1.0.0]",
-                    AppVersion = "v1.0.0",
-                    LogoAscii = @"
+                    new SystemSetting
+                    {
+                        SettingKey = "CLI_Welcome_Message",
+                        SettingValue = "2S1O - Warehouse Management System [v1.0.0]",
+                        AppVersion = "v1.0.0",
+                        LogoAscii = @"
  ██████╗ ███████╗ ██╗ ██████╗ 
  ╚════██╗██╔════╝███║██╔═══██╗
   █████╔╝███████╗╚██║██║   ██║
  ██╔═══╝ ╚════██║ ██║██║   ██║
  ███████╗███████║ ██║╚██████╔╝
  ╚══════╝╚══════╝ ╚═╝ ╚═════╝"
+                    },
+                    new SystemSetting
+                    {
+                        SettingKey = "BarcodeType",
+                        SettingValue = "QR", // Default to QR
+                        AppVersion = "v1.0.0"
+                    }
                 };
-                
-                await _context.SystemSettings.AddAsync(settings);
+
+                await _context.SystemSettings.AddRangeAsync(settings);
                 await _context.SaveChangesAsync();
             }
         }
 
         private async Task SeedModulesAsync(IEnumerable<Assembly> assemblies)
         {
-            // Scan for Controllers in assemblies
-            var controllerNames = assemblies.SelectMany(a => a.GetTypes())
-                .Where(t => t.Name.EndsWith("Controller") && !t.IsAbstract)
-                .Select(t => t.Name.Replace("Controller", ""))
+            // Scan for Entities (BaseEntity) to define Modules
+            var entityNames = assemblies.SelectMany(a => a.GetTypes())
+                .Where(t => typeof(S2O1.Domain.Common.BaseEntity).IsAssignableFrom(t) && !t.IsAbstract)
+                .Select(t => t.Name)
                 .ToList();
 
-            // Add Static Modules (Core Business Modules)
+            // Add Static / Special Modules
             var staticModules = new List<string>
             {
-                "Warehouse", "Stock", "Product", "Category",
-                "Supplier", "Customer", "Sales", "Offers", "Reports"
+                "Reports", "Stock", "Sales", "Warehouse" // Business logical areas
             };
 
-            var allModuleNames = staticModules.Union(controllerNames).Distinct();
+            // Maintain compatibility with existing controller-based naming where it differs
+            var legacyModules = new List<string>
+            {
+                "Users", "Companies", "Invoices", "Offers", "System", "Logs" // Controller-based names
+            };
+
+            var allModuleNames = staticModules
+                .Union(entityNames)
+                .Union(legacyModules)
+                .Distinct();
 
             using var transaction = await _context.Database.BeginTransactionAsync();
             try

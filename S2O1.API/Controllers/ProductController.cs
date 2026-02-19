@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Mvc;
 using S2O1.Business.Services.Interfaces;
 using S2O1.Business.DTOs.Stock;
+using S2O1.DataAccess.Contexts;
 using System.Threading.Tasks;
 
 namespace S2O1.API.Controllers
@@ -11,12 +12,35 @@ namespace S2O1.API.Controllers
     {
         private readonly IProductService _productService;
         
-        public ProductController(IProductService productService)
+        private readonly S2O1DbContext _context;
+        private readonly S2O1.Core.Interfaces.ICurrentUserService _userService;
+
+        public ProductController(IProductService productService, S2O1DbContext context, S2O1.Core.Interfaces.ICurrentUserService userService)
         {
             _productService = productService;
+            _context = context;
+            _userService = userService;
+        }
+
+        private async Task<bool> HasPermissionAsync(string module, string type)
+        {
+            var userId = _userService.UserId;
+            if (!userId.HasValue) return false;
+            if (userId == 1) return true; // Root check
+
+            return await Microsoft.EntityFrameworkCore.EntityFrameworkQueryableExtensions.AnyAsync(
+                Microsoft.EntityFrameworkCore.EntityFrameworkQueryableExtensions.Include(
+                    _context.UserPermissions, p => p.Module),
+                p => p.UserId == userId.Value && 
+                     p.Module.ModuleName == module &&
+                     (p.IsFull || 
+                      (type == "Read" && p.CanRead) || 
+                      (type == "Write" && p.CanWrite) || 
+                      (type == "Delete" && p.CanDelete)));
         }
 
         [HttpPost]
+        [Filters.Permission("Product", "Write")]
         public async Task<IActionResult> Create([FromBody] CreateProductDto dto)
         {
              try
@@ -31,6 +55,7 @@ namespace S2O1.API.Controllers
         }
 
         [HttpGet("{id}")]
+        [Filters.Permission("Product", "Read")]
         public async Task<IActionResult> Get(int id)
         {
             var p = await _productService.GetByIdAsync(id);
@@ -39,6 +64,7 @@ namespace S2O1.API.Controllers
         }
 
         [HttpGet]
+        [Filters.Permission("Product", "Read")]
         public async Task<IActionResult> GetAll()
         {
             var p = await _productService.GetAllAsync();
@@ -46,6 +72,7 @@ namespace S2O1.API.Controllers
         }
 
         [HttpPut]
+        [Filters.Permission("Product", "Write")]
         public async Task<IActionResult> Update([FromBody] UpdateProductDto dto)
         {
              try
@@ -61,6 +88,7 @@ namespace S2O1.API.Controllers
         }
 
         [HttpDelete("{id}")]
+        [Filters.Permission("Product", "Delete")]
         public async Task<IActionResult> Delete(int id)
         {
             var res = await _productService.DeleteAsync(id);
@@ -69,6 +97,7 @@ namespace S2O1.API.Controllers
         }
 
         [HttpGet("brands")]
+        [Filters.Permission("Product", "Read")]
         public async Task<IActionResult> GetBrands()
         {
             var data = await _productService.GetAllBrandsAsync();
@@ -78,17 +107,30 @@ namespace S2O1.API.Controllers
         [HttpGet("categories")]
         public async Task<IActionResult> GetCategories()
         {
+            // Allow if has Category:Read OR Product:Read OR Product:Write
+            // Used for dropdowns in Product Add/Edit
+            bool canReadCategory = await HasPermissionAsync("Category", "Read");
+            bool canReadProduct = await HasPermissionAsync("Product", "Read");
+            bool canWriteProduct = await HasPermissionAsync("Product", "Write");
+
+            if (!canReadCategory && !canReadProduct && !canWriteProduct)
+            {
+               return Forbid();
+            }
+
             var data = await _productService.GetAllCategoriesAsync();
             return Ok(data);
         }
 
         [HttpGet("units")]
+        [Filters.Permission("Product", "Read")]
         public async Task<IActionResult> GetUnits()
         {
             var data = await _productService.GetAllUnitsAsync();
             return Ok(data);
         }
         [HttpPost("brands")]
+        [Filters.Permission("Product", "Write")]
         public async Task<IActionResult> CreateBrand([FromBody] CreateBrandDto dto)
         {
             var res = await _productService.CreateBrandAsync(dto);
@@ -96,6 +138,7 @@ namespace S2O1.API.Controllers
         }
 
         [HttpPost("categories")]
+        [Filters.Permission("Category", "Write")]
         public async Task<IActionResult> CreateCategory([FromBody] CreateCategoryDto dto)
         {
             var res = await _productService.CreateCategoryAsync(dto);
@@ -103,6 +146,7 @@ namespace S2O1.API.Controllers
         }
 
         [HttpPost("units")]
+        [Filters.Permission("Product", "Write")]
         public async Task<IActionResult> CreateUnit([FromBody] CreateUnitDto dto)
         {
             var res = await _productService.CreateUnitAsync(dto);
@@ -110,6 +154,7 @@ namespace S2O1.API.Controllers
         }
 
         [HttpPut("brands")]
+        [Filters.Permission("Product", "Write")]
         public async Task<IActionResult> UpdateBrand([FromBody] UpdateBrandDto dto)
         {
             var res = await _productService.UpdateBrandAsync(dto);
@@ -118,22 +163,25 @@ namespace S2O1.API.Controllers
         }
 
         [HttpDelete("brands/{id}")]
+        [Filters.Permission("Product", "Delete")]
         public async Task<IActionResult> DeleteBrand(int id)
         {
-            var res = await _productService.DeleteBrandAsync(id);
-            if(!res) return NotFound();
-            return Ok();
+             var res = await _productService.DeleteBrandAsync(id);
+             if(!res) return NotFound();
+             return Ok();
         }
 
         [HttpPut("categories")]
+        [Filters.Permission("Category", "Write")]
         public async Task<IActionResult> UpdateCategory([FromBody] UpdateCategoryDto dto)
         {
             var res = await _productService.UpdateCategoryAsync(dto);
-             if(res == null) return NotFound();
+            if(res == null) return NotFound();
             return Ok(res);
         }
 
         [HttpDelete("categories/{id}")]
+        [Filters.Permission("Category", "Delete")]
         public async Task<IActionResult> DeleteCategory(int id)
         {
             var res = await _productService.DeleteCategoryAsync(id);
@@ -142,6 +190,7 @@ namespace S2O1.API.Controllers
         }
 
         [HttpPut("units")]
+        [Filters.Permission("Product", "Write")]
         public async Task<IActionResult> UpdateUnit([FromBody] UpdateUnitDto dto)
         {
             var res = await _productService.UpdateUnitAsync(dto);
@@ -150,6 +199,7 @@ namespace S2O1.API.Controllers
         }
 
         [HttpDelete("units/{id}")]
+        [Filters.Permission("Product", "Delete")]
         public async Task<IActionResult> DeleteUnit(int id)
         {
             var res = await _productService.DeleteUnitAsync(id);

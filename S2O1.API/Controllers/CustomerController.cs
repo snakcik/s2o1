@@ -20,6 +20,7 @@ namespace S2O1.API.Controllers
         // --- Customer Company Endpoints ---
 
         [HttpGet("companies")]
+        [Filters.Permission("Customer", "Read")]
         public async Task<ActionResult<IEnumerable<CustomerCompanyDto>>> GetAllCompanies()
         {
             var result = await _customerService.GetAllCompaniesAsync();
@@ -27,6 +28,7 @@ namespace S2O1.API.Controllers
         }
 
         [HttpGet("companies/{id}")]
+        [Filters.Permission("Customer", "Read")]
         public async Task<ActionResult<CustomerCompanyDto>> GetCompanyById(int id)
         {
             var result = await _customerService.GetCompanyByIdAsync(id);
@@ -35,6 +37,7 @@ namespace S2O1.API.Controllers
         }
 
         [HttpPost("companies")]
+        [Filters.Permission("Customer", "Write")]
         public async Task<ActionResult<CustomerCompanyDto>> CreateCompany(CreateCustomerCompanyDto dto)
         {
             var result = await _customerService.CreateCompanyAsync(dto);
@@ -42,6 +45,7 @@ namespace S2O1.API.Controllers
         }
 
         [HttpPut("companies")]
+        [Filters.Permission("Customer", "Write")]
         public async Task<ActionResult<CustomerCompanyDto>> UpdateCompany(UpdateCustomerCompanyDto dto)
         {
             var result = await _customerService.UpdateCompanyAsync(dto);
@@ -50,6 +54,7 @@ namespace S2O1.API.Controllers
         }
 
         [HttpDelete("companies/{id}")]
+        [Filters.Permission("Customer", "Delete")]
         public async Task<ActionResult<bool>> DeleteCompany(int id)
         {
             var result = await _customerService.DeleteCompanyAsync(id);
@@ -60,6 +65,7 @@ namespace S2O1.API.Controllers
         // --- Customer Endpoints ---
 
         [HttpGet]
+        [Filters.Permission("Customer", "Read")]
         public async Task<ActionResult<IEnumerable<CustomerDto>>> GetAllCustomers()
         {
             var result = await _customerService.GetAllCustomersAsync();
@@ -67,6 +73,7 @@ namespace S2O1.API.Controllers
         }
 
         [HttpGet("{id}")]
+        [Filters.Permission("Customer", "Read")]
         public async Task<ActionResult<CustomerDto>> GetCustomerById(int id)
         {
             var result = await _customerService.GetCustomerByIdAsync(id);
@@ -75,6 +82,7 @@ namespace S2O1.API.Controllers
         }
 
         [HttpPost]
+        [Filters.Permission("Customer", "Write")]
         public async Task<ActionResult<CustomerDto>> CreateCustomer(CreateCustomerDto dto)
         {
             var result = await _customerService.CreateCustomerAsync(dto);
@@ -82,6 +90,7 @@ namespace S2O1.API.Controllers
         }
 
         [HttpPut]
+        [Filters.Permission("Customer", "Write")]
         public async Task<ActionResult<CustomerDto>> UpdateCustomer(UpdateCustomerDto dto)
         {
             var result = await _customerService.UpdateCustomerAsync(dto);
@@ -90,6 +99,7 @@ namespace S2O1.API.Controllers
         }
 
         [HttpDelete("{id}")]
+        [Filters.Permission("Customer", "Delete")]
         public async Task<ActionResult<bool>> DeleteCustomer(int id)
         {
             var result = await _customerService.DeleteCustomerAsync(id);

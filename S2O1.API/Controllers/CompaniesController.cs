@@ -17,6 +17,7 @@ namespace S2O1.API.Controllers
         }
 
         [HttpGet]
+        [Filters.Permission("Companies", "Read")]
         public async Task<IActionResult> GetAll()
         {
             var list = await _companyService.GetAllAsync();
@@ -24,6 +25,7 @@ namespace S2O1.API.Controllers
         }
 
         [HttpPost]
+        [Filters.Permission("Companies", "Write")]
         public async Task<IActionResult> Create([FromBody] CreateCompanyDto dto)
         {
             try
@@ -38,6 +40,7 @@ namespace S2O1.API.Controllers
         }
 
         [HttpDelete("{id}")]
+        [Filters.Permission("Companies", "Delete")]
         public async Task<IActionResult> Delete(int id)
         {
             var res = await _companyService.DeleteAsync(id);

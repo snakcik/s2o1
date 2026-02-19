@@ -43,6 +43,13 @@ namespace S2O1.Business.DTOs.Stock // Using Stock for now as mostly related
         public decimal Quantity { get; set; }
         public decimal UnitPrice { get; set; }
         public decimal DiscountRate { get; set; }
-        public string Currency { get; set; }
+        public string Currency { get; set; } = "TL";
+    }
+
+    public class SendOfferEmailDto
+    {
+        public string ToEmail { get; set; } = string.Empty;
+        public string HtmlContent { get; set; } = string.Empty;
+        public string Subject { get; set; } = string.Empty;
     }
 }

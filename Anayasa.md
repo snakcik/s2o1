@@ -965,7 +965,24 @@ Logging: CLI üzerinden yapılan tüm "Database Update" veya "API Key Creation" 
 
 
 
+Depo Yönetimi
 
+Diğer entitiye bağımlı yetkiler dışında Yetki modülleri altına depo yetkisi oluştur 
+bu yetkiye sahip olan kullanıcılar artık sistemde depocu olacak. ancak istenirse elle farklı yetkiler yine verilebilir.
+
+Depo altına Raf ekleme menüsü getir depo altına raf ekleyebileyim.
+Depoya eklenen ürünler için otomatik bir kod oluşsun ve o ürünün uniq kodu artık o
+ürün barkod veya qr da ürünün hangi şirket deposunda olduğu ürünün rafı. ürünün ne olduğu bilgisi olacak.
+
+Ayarlar menüsünde sistem ayarları altında ayar eklemek istiyorum. 
+Bu ayara bağlı olarak sistem ürün kodunu ya QR kod oluşturacak yada barkod oluşturacak.
+
+Depocular ne yapacak;
+
+Kullanıcı fatura kestiği zaman depo yetkisi olan kişilerin Dashboar'ına satış düşsün ve Depocu bu satışın ürünlerini depodan çıkarmak için işi üzerine alsın.
+depocu işi üzerine aldığı zaman;
+Satışı yapılan ürünlerin kodu, hangi depoda, hangi rafta olduğu liste olarak depocuda gözüksün.
+Depocu için bir sepet oluşturulsun ve depocu ürünler için oluşan barkod/qr kod veya ürünleri elle seçerek ürünleri sepete eklesin sepet tamamlandıktan sonra  depodan çıkış işlemini onaylasın. onay ekranı sonrası teslim eden. ilgili depocu teslim alan Textbox ta isim soy isim alınacak ve sepete eklenen ürünler için irsaliye oluşacak irsaliyede satışın yapıldığı şirket bilgileri ürün markası kodu ve hangi üründen kaç birim olduğu yazacak. ürünler için irsaliyeye ekle/ekleme seçeneği olsun ürün ekleme sayfasında bu seçenek çıksın çünkü işçilik gibi soyut kavramlar depoda olmayacağı için irsaliyeye eklenmeyecek.
 
 
 

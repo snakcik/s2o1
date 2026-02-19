@@ -21,6 +21,7 @@ namespace S2O1.API.Controllers
         }
 
         [HttpGet("info")]
+        [Filters.Permission("System", "Read")]
         public async Task<IActionResult> GetSystemInfo()
         {
             bool dbStatus = false;
@@ -57,6 +58,7 @@ namespace S2O1.API.Controllers
         }
 
         [HttpGet("exchange-rates")]
+        [Filters.Permission("System", "Read")]
         public async Task<IActionResult> GetExchangeRates()
         {
             try
@@ -98,6 +100,242 @@ namespace S2O1.API.Controllers
             {
                 return BadRequest(new { error = "Kurlar alınamadı: " + ex.Message });
             }
+        }
+        [HttpGet("db-config")]
+        public ActionResult GetDbConfig([FromServices] Microsoft.Extensions.Configuration.IConfiguration config, [FromServices] S2O1.Core.Interfaces.ICurrentUserService userService)
+        {
+            if (userService.UserId != 1) return Forbid();
+
+            var connStr = config.GetConnectionString("DefaultConnection");
+            return Ok(new { connectionString = connStr });
+        }
+
+        [HttpPost("db-config")]
+        public async Task<IActionResult> UpdateDbConfig([FromBody] DbConfigDto dto, [FromServices] S2O1.Core.Interfaces.ICurrentUserService userService)
+        {
+            if (userService.UserId != 1) return Forbid();
+
+            try
+            {
+                // Verify validity first?
+                // Construct connection string
+                var builder = new Microsoft.Data.SqlClient.SqlConnectionStringBuilder();
+                builder.DataSource = dto.Server;
+                builder.InitialCatalog = dto.Database;
+                
+                if (dto.IntegratedSecurity)
+                {
+                    builder.IntegratedSecurity = true;
+                }
+                else
+                {
+                    builder.UserID = dto.User;
+                    builder.Password = dto.Password;
+                    builder.IntegratedSecurity = false;
+                }
+                
+                builder.TrustServerCertificate = true; // Force trust for local dev usually
+
+                var newConnStr = builder.ConnectionString;
+
+                // Update appsettings.json
+                var filePath = System.IO.Path.Combine(_env.ContentRootPath, "appsettings.json");
+                var json = await System.IO.File.ReadAllTextAsync(filePath);
+                var jsonObj = System.Text.Json.Nodes.JsonNode.Parse(json);
+                
+                jsonObj["ConnectionStrings"]["DefaultConnection"] = newConnStr;
+                
+                await System.IO.File.WriteAllTextAsync(filePath, jsonObj.ToString());
+
+                return Ok(new { message = "Veritabanı ayarları güncellendi. Uygulama yeniden başlatılmalıdır." });
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(new { message = ex.Message });
+            }
+        }
+
+        public class DbConfigDto
+        {
+            public string Server { get; set; }
+            public string Database { get; set; }
+            public string User { get; set; }
+            public string Password { get; set; }
+            public bool IntegratedSecurity { get; set; }
+        }
+
+        [HttpGet("settings")]
+        public async Task<IActionResult> GetSettings([FromServices] S2O1.Core.Interfaces.ICurrentUserService userService)
+        {
+            if (userService.UserId != 1) return Forbid();
+
+            var strongPwd = await _context.SystemSettings.FirstOrDefaultAsync(s => s.SettingKey == "ForceStrongPassword");
+            var barcodeType = await _context.SystemSettings.FirstOrDefaultAsync(s => s.SettingKey == "BarcodeType");
+
+            return Ok(new 
+            { 
+                forceStrongPassword = strongPwd?.SettingValue == "true",
+                barcodeType = barcodeType?.SettingValue ?? "QR"
+            });
+        }
+
+        [HttpPost("settings")]
+        public async Task<IActionResult> UpdateSettings([FromBody] SystemSettingsDto dto, [FromServices] S2O1.Core.Interfaces.ICurrentUserService userService)
+        {
+            if (userService.UserId != 1) return Forbid();
+
+            async Task Upsert(string key, string value)
+            {
+                var s = await _context.SystemSettings.FirstOrDefaultAsync(x => x.SettingKey == key);
+                if (s == null)
+                {
+                    _context.SystemSettings.Add(new S2O1.Domain.Entities.SystemSetting 
+                    { 
+                        SettingKey = key, 
+                        SettingValue = value,
+                        AppVersion = "v1.0.0",
+                        LogoAscii = "",
+                        CreateDate = DateTime.Now,
+                        IsActive = true
+                    });
+                }
+                else
+                {
+                    s.SettingValue = value;
+                    _context.SystemSettings.Update(s);
+                }
+            }
+
+            await Upsert("ForceStrongPassword", dto.ForceStrongPassword ? "true" : "false");
+            await Upsert("BarcodeType", dto.BarcodeType ?? "QR");
+
+            await _context.SaveChangesAsync();
+            return Ok(new { message = "Sistem ayarları güncellendi." });
+        }
+
+        [HttpGet("mail-settings")]
+        [Filters.Permission("System", "Read")]
+        public async Task<IActionResult> GetMailSettings([FromServices] S2O1.Core.Interfaces.ICurrentUserService userService)
+        {
+            if (userService.UserId != 1) return Forbid();
+
+            var settings = await _context.SystemSettings
+                .Where(s => s.SettingKey.StartsWith("Mail_"))
+                .ToListAsync();
+
+            var dto = new MailSettingsDto
+            {
+                SmtpHost = settings.FirstOrDefault(s => s.SettingKey == "Mail_SmtpHost")?.SettingValue ?? "",
+                SmtpPort = int.TryParse(settings.FirstOrDefault(s => s.SettingKey == "Mail_SmtpPort")?.SettingValue, out var p) ? p : 587,
+                Username = settings.FirstOrDefault(s => s.SettingKey == "Mail_Username")?.SettingValue ?? "",
+                Password = settings.FirstOrDefault(s => s.SettingKey == "Mail_Password")?.SettingValue ?? "",
+                EnableSsl = settings.FirstOrDefault(s => s.SettingKey == "Mail_EnableSsl")?.SettingValue == "true",
+                FromEmail = settings.FirstOrDefault(s => s.SettingKey == "Mail_FromEmail")?.SettingValue ?? "",
+                FromName = settings.FirstOrDefault(s => s.SettingKey == "Mail_FromName")?.SettingValue ?? "S2O1 System"
+            };
+
+            return Ok(dto);
+        }
+
+        [HttpPost("mail-settings")]
+        [Filters.Permission("System", "Write")]
+        public async Task<IActionResult> UpdateMailSettings([FromBody] MailSettingsDto dto, [FromServices] S2O1.Core.Interfaces.ICurrentUserService userService)
+        {
+            if (userService.UserId != 1) return Forbid();
+
+            async Task Upsert(string key, string value)
+            {
+                var s = await _context.SystemSettings.FirstOrDefaultAsync(x => x.SettingKey == key);
+                if (s == null)
+                {
+                    _context.SystemSettings.Add(new S2O1.Domain.Entities.SystemSetting 
+                    { 
+                        SettingKey = key, 
+                        SettingValue = value,
+                        AppVersion = "v1.0.0",
+                        LogoAscii = "",
+                        CreateDate = DateTime.Now,
+                        IsActive = true
+                    });
+                }
+                else
+                {
+                    s.SettingValue = value;
+                    _context.SystemSettings.Update(s);
+                }
+            }
+
+            await Upsert("Mail_SmtpHost", dto.SmtpHost);
+            await Upsert("Mail_SmtpPort", dto.SmtpPort.ToString());
+            await Upsert("Mail_Username", dto.Username);
+            await Upsert("Mail_Password", dto.Password);
+            await Upsert("Mail_EnableSsl", dto.EnableSsl ? "true" : "false");
+            await Upsert("Mail_FromEmail", dto.FromEmail);
+            await Upsert("Mail_FromName", dto.FromName);
+
+            await _context.SaveChangesAsync();
+            return Ok(new { message = "Mail ayarları güncellendi." });
+        }
+
+        [HttpPost("test-mail")]
+        public async Task<IActionResult> TestMail([FromBody] MailSettingsDto dto, [FromServices] S2O1.Core.Interfaces.ICurrentUserService userService)
+        {
+            if (userService.UserId != 1) return Forbid();
+
+            if (string.IsNullOrEmpty(dto.SmtpHost) || string.IsNullOrEmpty(dto.FromEmail))
+                return BadRequest(new { message = "Mail ayarları (Host ve Gönderen) eksik." });
+
+            try
+            {
+                // Ensure TLS 1.2+ is supported (SmtpClient can be picky)
+                System.Net.ServicePointManager.SecurityProtocol = System.Net.SecurityProtocolType.Tls12 | System.Net.SecurityProtocolType.Tls13;
+
+                using var smtp = new System.Net.Mail.SmtpClient(dto.SmtpHost, dto.SmtpPort);
+                smtp.EnableSsl = dto.EnableSsl;
+                smtp.UseDefaultCredentials = false;
+                smtp.DeliveryMethod = System.Net.Mail.SmtpDeliveryMethod.Network;
+                smtp.Timeout = 20000; // 20 seconds
+                
+                if (!string.IsNullOrEmpty(dto.Username))
+                {
+                    smtp.Credentials = new System.Net.NetworkCredential(dto.Username, dto.Password);
+                }
+
+                var mail = new System.Net.Mail.MailMessage();
+                mail.From = new System.Net.Mail.MailAddress(dto.FromEmail, dto.FromName ?? "S2O1 Test");
+                mail.To.Add(dto.FromEmail); 
+                mail.Subject = "S2O1 Sistem - Sınama Maili";
+                mail.Body = $"Bu bir sınama mailidir.\n\n" +
+                            $"Durum: Altyapı Bağlantısı Deneniyor\n" +
+                            $"Zaman: {DateTime.Now}\n" +
+                            $"Sunucu: {dto.SmtpHost}:{dto.SmtpPort}\n" +
+                            $"SSL: {dto.EnableSsl}\n\n";
+
+                await smtp.SendMailAsync(mail);
+                return Ok(new { message = "Sınama maili başarıyla gönderildi. Lütfen gelen kutunuzu kontrol edin." });
+            }
+            catch (Exception ex)
+            {
+                var inner = ex.InnerException != null ? " | İç Hata: " + ex.InnerException.Message : "";
+                return BadRequest(new { message = $"Mail gönderimi başarısız ({dto.SmtpHost}:{dto.SmtpPort}, SSL:{dto.EnableSsl}): {ex.Message}{inner}" });
+            }
+        }
+
+        public class MailSettingsDto
+        {
+            public string SmtpHost { get; set; }
+            public int SmtpPort { get; set; }
+            public string Username { get; set; }
+            public string Password { get; set; }
+            public bool EnableSsl { get; set; }
+            public string FromEmail { get; set; }
+            public string FromName { get; set; }
+        }
+
+        public class SystemSettingsDto
+        {
+            public bool ForceStrongPassword { get; set; }
+            public string BarcodeType { get; set; }
         }
     }
 }

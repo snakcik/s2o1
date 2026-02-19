@@ -19,4 +19,20 @@ namespace S2O1.Business.Services.Interfaces
     {
         public int Id { get; set; }
     }
+
+    public class WarehouseShelfDto
+    {
+        public int Id { get; set; }
+        public int WarehouseId { get; set; }
+        public string WarehouseName { get; set; }
+        public string Name { get; set; }
+        public string Description { get; set; }
+    }
+
+    public class CreateWarehouseShelfDto
+    {
+        public int WarehouseId { get; set; }
+        public string Name { get; set; }
+        public string Description { get; set; }
+    }
 }

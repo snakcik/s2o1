@@ -20,6 +20,7 @@ namespace S2O1.API.Controllers
         }
 
         [HttpGet]
+        [Filters.Permission("Invoices", "Read")]
         public async Task<IActionResult> GetAll()
         {
             var invoices = await _invoiceService.GetAllAsync();
@@ -27,6 +28,7 @@ namespace S2O1.API.Controllers
         }
 
         [HttpGet("{id}")]
+        [Filters.Permission("Invoices", "Read")]
         public async Task<IActionResult> GetById(int id)
         {
             var invoice = await _invoiceService.GetByIdAsync(id);
@@ -35,6 +37,7 @@ namespace S2O1.API.Controllers
         }
 
         [HttpPost("{id}/approve")]
+        [Filters.Permission("Invoices", "Write")]
         public async Task<IActionResult> ApproveInvoice(int id)
         {
             var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier);
@@ -46,6 +49,7 @@ namespace S2O1.API.Controllers
         }
 
         [HttpPost]
+        [Filters.Permission("Invoices", "Write")]
         public async Task<IActionResult> CreateInvoice([FromBody] CreateInvoiceDto dto)
         {
             var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier);

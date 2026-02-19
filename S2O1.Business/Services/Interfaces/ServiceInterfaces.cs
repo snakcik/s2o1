@@ -18,6 +18,26 @@ namespace S2O1.Business.Services.Interfaces
         Task<bool> SaveUserPermissionsAsync(int userId, IEnumerable<UserPermissionDto> permissions);
         Task<bool> DeleteUserAsync(int userId);
         Task<UserDto> UpdateUserAsync(int userId, UpdateUserDto dto);
+        Task<bool> ChangePasswordAsync(int userId, ChangePasswordDto dto);
+        Task<UserDto?> GetUserByIdAsync(int userId);
+        Task<bool> ForgotPasswordAsync(string email, string baseUrl);
+        Task<bool> ResetPasswordAsync(string token, string newPassword);
+        
+        // Title Management
+        Task<IEnumerable<TitleDto>> GetAllTitlesAsync();
+        Task<IEnumerable<TitleDto>> GetTitlesByCompanyAsync(int companyId);
+        Task<TitleDto> CreateTitleAsync(CreateTitleDto dto);
+        Task<bool> DeleteTitleAsync(int id);
+        
+        // Title Permissions
+        Task<IEnumerable<TitlePermissionDto>> GetTitlePermissionsAsync(int titleId);
+        Task<bool> SaveTitlePermissionsAsync(int titleId, IEnumerable<TitlePermissionDto> permissions);
+    }
+
+    public interface IMailService
+    {
+        Task SendEmailAsync(string to, string subject, string body, bool isHtml = true);
+        Task SendOfferEmailAsync(string to, string subject, string htmlContent, string fileName);
     }
 
     public interface ICompanyService
@@ -32,6 +52,8 @@ namespace S2O1.Business.Services.Interfaces
         Task CreateMovementAsync(StockMovementDto movementDto);
         Task<decimal> GetProductStockAsync(int productId, int warehouseId);
         Task<System.Collections.Generic.IEnumerable<WarehouseStockReportDto>> GetWarehouseStockReportAsync(int? warehouseId);
+        Task<System.Collections.Generic.IEnumerable<WaybillDto>> GetWaybillsBySupplierAsync(int supplierId);
+        Task<System.Collections.Generic.IEnumerable<WaybillDto>> SearchWaybillsAsync(string? waybillNo, System.DateTime? startDate, System.DateTime? endDate, int? supplierId);
     }
 
     public interface IWarehouseService
@@ -41,6 +63,12 @@ namespace S2O1.Business.Services.Interfaces
         Task<WarehouseDto> CreateAsync(CreateWarehouseDto dto);
         Task<WarehouseDto> UpdateAsync(UpdateWarehouseDto dto);
         Task<bool> DeleteAsync(int id);
+
+        // Shelves
+        Task<IEnumerable<WarehouseShelfDto>> GetAllShelvesAsync();
+        Task<IEnumerable<WarehouseShelfDto>> GetShelvesAsync(int warehouseId);
+        Task<WarehouseShelfDto> CreateShelfAsync(CreateWarehouseShelfDto dto);
+        Task<bool> DeleteShelfAsync(int id);
     }
 
     public interface IProductService
@@ -82,9 +110,14 @@ namespace S2O1.Business.Services.Interfaces
     public interface IInvoiceService
     {
         Task<InvoiceDto> GetByIdAsync(int id);
-        Task<IEnumerable<InvoiceDto>> GetAllAsync(); // Added
+        Task<IEnumerable<InvoiceDto>> GetAllAsync();
         Task<InvoiceDto> CreateAsync(CreateInvoiceDto dto);
         Task<bool> ApproveInvoiceAsync(int invoiceId, int approverUserId);
+        
+        // Warehouse Workflow
+        Task<IEnumerable<InvoiceDto>> GetPendingDeliveriesAsync();
+        Task<bool> AssignToDelivererAsync(int invoiceId, int userId);
+        Task<bool> CompleteDeliveryAsync(WarehouseDeliveryDto dto);
     }
 
     public interface ISupplierService
@@ -120,5 +153,14 @@ namespace S2O1.Business.Services.Interfaces
         Task<CustomerDto> CreateCustomerAsync(CreateCustomerDto dto);
         Task<CustomerDto> UpdateCustomerAsync(UpdateCustomerDto dto);
         Task<bool> DeleteCustomerAsync(int id);
+    }
+
+    public interface IDispatchNoteService
+    {
+        Task<IEnumerable<S2O1.Business.DTOs.Logistic.DispatchNoteDto>> GetAllAsync();
+        Task<S2O1.Business.DTOs.Logistic.DispatchNoteDto> GetByIdAsync(int id);
+        Task<S2O1.Business.DTOs.Logistic.DispatchNoteDto> CreateAsync(S2O1.Business.DTOs.Logistic.CreateDispatchNoteDto dto);
+        Task<bool> UpdateStatusAsync(int id, string status);
+        // More methods for Phase 3 (Assignment, etc.)
     }
 }

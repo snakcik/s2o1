@@ -61,30 +61,30 @@ namespace S2O1.Business.Services.Implementation
             // Load Items
             var items = await _unitOfWork.Repository<OfferItem>().FindAsync(i => i.OfferId == offerId);
             
+            // Resolve Company IDs
+            var user = await _unitOfWork.Repository<User>().GetByIdAsync(userId);
+            if (user == null || !user.CompanyId.HasValue) 
+                throw new Exception("Invoice sender company not found.");
+
+            var customer = await _unitOfWork.Repository<Customer>().GetByIdAsync(offer.CustomerId);
+            if (customer == null)
+                throw new Exception("Invoice receiver customer not found.");
+
             var invoiceDto = new CreateInvoiceDto
             {
                 OfferId = offerId,
                 PreparedByUserId = userId,
-                DueDate = DateTime.Now.AddDays(30), // Default term
-                ReceiverCompanyId = offer.CustomerId, // Linking Customer to Receiver Company ID? Customer might not be Company ID. Mapping logic needed.
-                // Assuming logic for Company ID resolution matches or Customer has CompanyId link.
-                // For now, passing 0 or dummy if logic is complex.
-                // Customer entity has CustomerCompanyId. Let's fetch Customer.
+                SenderCompanyId = user.CompanyId.Value,
+                ReceiverCompanyId = customer.CustomerCompanyId,
+                DueDate = DateTime.Now.AddDays(30),
                 Items = items.Select(i => new InvoiceItemDto 
                 {
                     ProductId = i.ProductId,
                     Quantity = i.Quantity,
                     UnitPrice = i.UnitPrice,
-                    VatRate = 18 // Default or from Product?
+                    VatRate = 18 
                 }).ToList()
             };
-            
-            // Resolve Company ID from Customer
-            var customer = await _unitOfWork.Repository<Customer>().GetByIdAsync(offer.CustomerId);
-            if (customer != null)
-            {
-                invoiceDto.ReceiverCompanyId = customer.CustomerCompanyId;
-            }
 
             var result = await _invoiceService.CreateAsync(invoiceDto);
             

@@ -31,6 +31,9 @@ namespace S2O1.Domain.Enums
         Sent = 2,
         Paid = 3,
         Cancelled = 4,
-        Approved = 5
+        Approved = 5,
+        WaitingForWarehouse = 6,
+        InPreparation = 7,
+        Delivered = 8
     }
 }

@@ -7,21 +7,31 @@
     <title>2S1O - Dashboard</title>
     <link rel="stylesheet" href="s2o1.css">
     <style>
-        .menu-item {
-            padding: 1rem;
-            margin-bottom: 0.5rem;
-            cursor: pointer;
-            border-radius: 8px;
-            transition: background 0.2s;
-            font-weight: 500;
+        /* Global Dashboard Fixes */
+        body {
+            display: block !important;
+            height: auto !important;
+            background: #f8fafc !important;
+            overflow-x: hidden;
         }
 
-        .menu-item:hover,
-        .menu-item.active {
-            background: #f3f4f6;
-            color: var(--primary);
+        .main-content {
+            width: 100%;
+            max-width: calc(100vw - 320px);
+            margin: 0 !important;
+            padding: 2rem 3rem 2rem 2rem !important;
+            /* Extra padding on right to ensure radius is visible */
+            box-sizing: border-box;
+            overflow-x: hidden;
         }
 
+        :root {
+            --primary-gradient: linear-gradient(135deg, #6366f1 0%, #a855f7 100%);
+            --glass-bg: rgba(255, 255, 255, 0.7);
+            --glass-border: rgba(255, 255, 255, 0.4);
+        }
+
+        /* Essential Original Styles (Restored) */
         .step-badge {
             padding: 0.25rem 0.75rem;
             border-radius: 20px;
@@ -44,53 +54,576 @@
             background: white;
             font-family: inherit;
         }
+
+        .mobile-toggle {
+            display: none;
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            background: var(--primary);
+            color: white;
+            border: none;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+            z-index: 1001;
+            cursor: pointer;
+            font-size: 1.5rem;
+        }
+
+        @media (max-width: 768px) {
+            .mobile-toggle {
+                display: flex;
+                align-items: center;
+                justify-content: center;
+            }
+        }
+
+        /* User Profile & Dropdown */
+        .user-profile-area {
+            position: relative;
+            cursor: pointer;
+            padding: 0.5rem;
+            border-radius: 12px;
+            transition: background 0.2s;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .user-profile-area:hover {
+            background: rgba(255, 255, 255, 0.5);
+        }
+
+        .user-dropdown {
+            position: absolute;
+            top: 100%;
+            right: 0;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+            min-width: 200px;
+            display: none;
+            z-index: 100;
+            margin-top: 0.5rem;
+            overflow: hidden;
+            border: 1px solid #f1f5f9;
+        }
+
+        .user-dropdown.show {
+            display: block;
+        }
+
+        .user-dropdown-item {
+            padding: 0.75rem 1rem;
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            color: #475569;
+            transition: background 0.2s;
+            text-align: left;
+        }
+
+        .user-dropdown-item:hover {
+            background: #f8fafc;
+            color: var(--primary);
+        }
+
+        /* Dashboard Specific Premium UI */
+        .glass-card {
+            background: var(--glass-bg);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid var(--glass-border);
+            border-radius: 20px;
+            box-shadow: none;
+            /* Shadow removed */
+            padding: 1.5rem;
+            transition: transform 0.2s;
+            max-width: 100%;
+        }
+
+        .glass-card:hover {
+            transform: translateY(-2px);
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 0.5rem;
+            font-size: 0.85rem;
+            font-weight: 600;
+            color: #475569;
+        }
+
+        .form-control {
+            width: 100%;
+            padding: 0.75rem 1rem;
+            background: rgba(255, 255, 255, 0.9);
+            border: 1px solid #e2e8f0;
+            border-radius: 12px;
+            font-size: 0.95rem;
+            transition: all 0.2s;
+            box-sizing: border-box;
+        }
+
+        .form-control:focus {
+            outline: none;
+            border-color: #6366f1;
+            box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.1);
+            background: white;
+        }
+
+        .file-upload-wrapper {
+            position: relative;
+            border: 2px dashed #cbd5e1;
+            border-radius: 12px;
+            padding: 1.5rem;
+            text-align: center;
+            background: rgba(248, 250, 252, 0.5);
+            transition: all 0.2s;
+            cursor: pointer;
+        }
+
+        .file-upload-wrapper:hover {
+            border-color: #6366f1;
+            background: rgba(99, 102, 241, 0.05);
+        }
+
+        .btn-confirm {
+            background: var(--primary-gradient);
+            color: white;
+            border: none;
+            padding: 0.8rem 1.5rem;
+            border-radius: 12px;
+            font-weight: 600;
+            cursor: pointer;
+            width: 100%;
+            transition: all 0.2s;
+            box-shadow: 0 4px 12px rgba(99, 102, 241, 0.2);
+        }
+
+        /* Waybill History Style */
+        .waybill-table {
+            width: 100%;
+            border-collapse: separate;
+            border-spacing: 0 0.5rem;
+        }
+
+        .waybill-table tr {
+            background: white;
+            transition: transform 0.2s;
+        }
+
+        .waybill-table td {
+            padding: 1rem;
+            background: white;
+        }
+
+        .waybill-table td:first-child {
+            border-radius: 12px 0 0 12px;
+        }
+
+        .waybill-table td:last-child {
+            border-radius: 0 12px 12px 0;
+        }
+
+        .qty-badge {
+            background: #f1f5f9;
+            color: #475569;
+            padding: 0.2rem 0.6rem;
+            border-radius: 8px;
+            font-weight: 700;
+        }
+
+        .status-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.4rem;
+            padding: 0.25rem 0.75rem;
+            border-radius: 20px;
+            font-size: 0.8rem;
+            font-weight: 600;
+        }
+
+        .status-success {
+            background: #dcfce7;
+            color: #166534;
+        }
+
+        .custom-scrollbar::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        .custom-scrollbar::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 10px;
+        }
+
+        /* Password Strength Meter */
+        .pass-strength-meter {
+            height: 5px;
+            background: #e2e8f0;
+            margin-top: 5px;
+            border-radius: 3px;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .pass-strength-bar {
+            height: 100%;
+            width: 0%;
+            transition: width 0.3s, background-color 0.3s;
+        }
+
+        .pass-weak {
+            background-color: var(--error);
+        }
+
+        .pass-medium {
+            background-color: #fca5a5;
+        }
+
+        .pass-strong {
+            background-color: var(--success);
+        }
+
+        .pass-text {
+            font-size: 0.75rem;
+            margin-top: 3px;
+            text-align: right;
+            color: #64748b;
+        }
+
+        /* QA Grid */
+        .qa-config-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+            gap: 1rem;
+            margin-top: 1.5rem;
+        }
+
+        .qa-config-card {
+            background: white;
+            padding: 1rem;
+            border-radius: 12px;
+            border: 1px solid #e2e8f0;
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .qa-config-card:hover {
+            border-color: var(--primary);
+            background: #fdfdff;
+        }
+
+        /* Inventory Tab Buttons Premium Design */
+        .tab-inv-btn {
+            padding: 0.6rem 1.2rem;
+            border-radius: 12px;
+            border: 1px solid var(--glass-border);
+            background: white;
+            color: #475569;
+            font-weight: 600;
+            font-size: 0.9rem;
+            cursor: pointer;
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .tab-inv-btn:hover {
+            background: #f1f5f9;
+            transform: translateY(-1px);
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.08);
+        }
+
+        .tab-inv-btn.active {
+            background: var(--primary-gradient);
+            color: white;
+            border-color: transparent;
+            box-shadow: 0 4px 12px rgba(99, 102, 241, 0.25);
+        }
+
+        /* Action Buttons Symmetrical Design */
+        .action-btn-container {
+            display: flex;
+            gap: 0.4rem;
+            justify-content: flex-end;
+            align-items: center;
+        }
+
+        .btn-action {
+            min-width: 75px;
+            padding: 0.4rem 0.6rem;
+            font-size: 0.8rem;
+            font-weight: 600;
+            border-radius: 8px;
+            border: none;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+        }
+
+        .btn-action:hover {
+            transform: translateY(-1px);
+            filter: brightness(1.1);
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+
+        .btn-edit {
+            background-color: #6366f1;
+        }
+
+        .btn-delete {
+            background-color: #ef4444;
+        }
+
+        /* Create/Add Button Premium Style */
+        .btn-create {
+            background: var(--success);
+            color: white;
+            border: none;
+            padding: 0.75rem 1rem;
+            border-radius: 12px;
+            font-weight: 700;
+            font-size: 0.85rem;
+            cursor: pointer;
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5rem;
+            box-shadow: 0 4px 12px rgba(16, 185, 129, 0.2);
+            width: 220px !important;
+            text-align: center;
+        }
+
+        .btn-create:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 16px rgba(16, 185, 129, 0.3);
+            filter: brightness(1.05);
+        }
+
+        .btn-create:active {
+            transform: translateY(0);
+        }
+
+        /* Settings Portal Design */
+        .settings-info-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 1rem;
+            margin-top: 1rem;
+            max-width: 100%;
+        }
+
+        .info-card-compact {
+            background: #f8fafc;
+            padding: 0.75rem 1rem;
+            border-radius: 12px;
+            border: 1px solid #e2e8f0;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .info-card-compact label {
+            font-size: 0.7rem;
+            color: #64748b;
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: 0.025em;
+            margin-bottom: 0.15rem;
+        }
+
+        .info-card-compact span {
+            font-size: 0.9rem;
+            font-weight: 600;
+            color: #1e293b;
+            word-break: break-all;
+        }
+
+        /* Collapsible Card Design (Equalized with Glass Card) */
+        .collapsible-card {
+            background: var(--glass-bg);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid var(--glass-border);
+            border-radius: 20px;
+            overflow: hidden;
+            margin-bottom: 1.5rem;
+            transition: all 0.3s ease;
+            box-shadow: none;
+        }
+
+        .collapsible-card:hover {
+            border-color: #6366f1;
+            transform: translateY(-2px);
+        }
+
+        .collapsible-header {
+            padding: 1.25rem 1.5rem;
+            background: transparent;
+            cursor: pointer;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            user-select: none;
+            transition: background 0.2s;
+        }
+
+        .collapsible-header:hover {
+            background: rgba(255, 255, 255, 0.4);
+        }
+
+        .collapsible-header h3 {
+            margin: 0;
+            font-size: 1.1rem;
+        }
+
+        .collapsible-icon {
+            font-size: 1.2rem;
+            transition: transform 0.3s ease;
+            color: #94a3b8;
+        }
+
+        .collapsible-content {
+            max-height: 0;
+            overflow: hidden;
+            transition: max-height 0.4s cubic-bezier(0, 1, 0, 1);
+            background: transparent;
+        }
+
+        .collapsible-card.active .collapsible-content {
+            max-height: 2000px;
+            /* arbitrary large value */
+            transition: max-height 0.4s ease-in;
+        }
+
+        .collapsible-card.active .collapsible-icon {
+            transform: rotate(180deg);
+            color: #6366f1;
+        }
+
+        .collapsible-inner {
+            padding: 1.5rem;
+            border-top: 1px solid #f1f5f9;
+        }
     </style>
 </head>
 
 <body>
     <div class="dashboard-layout">
         <!-- Sidebar -->
-        <div class="sidebar">
+        <div class="sidebar" id="sidebar">
             <div class="logo-area">
-                <div class="logo-text" style="font-size: 1.5rem;">2S1O v2.0</div>
+                <div class="logo-text">2S1O v2.0</div>
             </div>
 
             <div class="menu">
-                <div class="menu-item active" onclick="switchView('dashboard')">🏠 Anasayfa</div>
-                <div class="menu-item" onclick="switchView('companies')">🏢 Firma Tanımları (Bizim)</div>
-                <div class="menu-item" onclick="switchView('inventory')">📦 Stoklar</div>
-                <div class="menu-item" onclick="switchView('stock-entry')">➕ Stok Girişi</div>
-                <div class="menu-item" onclick="switchView('suppliers')">🚚 Tedarikçiler</div>
-                <div class="menu-item" onclick="switchView('pricelists')">💰 Fiyat Listesi</div>
+                <div class="menu-group-label" onclick="toggleMenuGroup(this)">Genel</div>
+                <div class="menu-group-content">
+                    <div class="menu-item active" onclick="switchView('dashboard')">🏠 <span>Anasayfa</span></div>
+                    <div class="menu-item" data-module="Reports" onclick="switchView('reports')">📊
+                        <span>Raporlar</span>
+                    </div>
+                </div>
 
-                <div
-                    style="padding: 0.5rem 1rem; font-size: 0.75rem; color: #9ca3af; text-transform: uppercase; letter-spacing: 0.05em; margin-top: 1rem;">
-                    Müşteri Yönetimi</div>
-                <div class="menu-item" onclick="switchView('customer-companies')">🤝 Müşteri Firmaları</div>
-                <div class="menu-item" onclick="switchView('customers')">👥 Müşteri Yetkilileri</div>
+                <div class="menu-group-label" onclick="toggleMenuGroup(this)">Stok Yönetimi</div>
+                <div class="menu-group-content">
+                    <div class="menu-item" data-module="Warehouse" onclick="switchView('warehouse-dashboard')">📦
+                        <span>Depo Paneli</span>
+                    </div>
+                    <div class="menu-item" data-module="Product" onclick="switchView('inventory', 'products')">📦
+                        <span>Ürün Listesi</span>
+                    </div>
+                    <div class="menu-item" data-module="Stock" data-permission="Stock:Write"
+                        onclick="switchView('stock-entry')">➕ <span>Stok Girişi</span></div>
+                    <div class="menu-item" data-module="Stock" onclick="switchView('waybill-history')">📜
+                        <span>İrsaliye Geçmişi</span>
+                    </div>
+                    <div class="menu-item" data-module="Warehouse" onclick="switchView('warehouses')">🏠
+                        <span>Depolar</span>
+                    </div>
+                    <div class="menu-item" data-module="Warehouse" onclick="switchView('shelves')">🪜
+                        <span>Raf Yönetimi</span>
+                    </div>
+                </div>
 
-                <div class="menu-item" onclick="switchView('offers')">📋 Teklifler</div>
-                <div class="menu-item" onclick="switchView('invoices')">🧾 Faturalar</div>
-                <div class="menu-item" onclick="switchView('reports')">📊 Raporlar</div>
-                <div class="menu-item" onclick="switchView('users')">👥 Kullanıcı Yönetimi</div>
-                <div class="menu-item" onclick="switchView('settings')">⚙️ Ayarlar</div>
-                <div class="menu-item" onclick="switchView('logs')">📜 Denetim Kayıtları</div>
+                <div class="menu-group-label collapsed" onclick="toggleMenuGroup(this)">Ticari</div>
+                <div class="menu-group-content collapsed">
+                    <div class="menu-item" data-module="Supplier" onclick="switchView('suppliers')">🚚
+                        <span>Tedarikçiler</span>
+                    </div>
+                    <div class="menu-item" data-module="Customer" onclick="switchView('customer-companies')">🤝
+                        <span>Müşteri Firmaları</span>
+                    </div>
+                    <div class="menu-item" data-module="Customer" onclick="switchView('customers')">👥 <span>Müşteri
+                            Yetkilileri</span></div>
+                </div>
+
+                <div class="menu-group-label collapsed" onclick="toggleMenuGroup(this)">Finans</div>
+                <div class="menu-group-content collapsed">
+                    <div class="menu-item" data-module="PriceList" onclick="switchView('pricelists')">💰 <span>Fiyat
+                            Listesi</span></div>
+                    <div class="menu-item" data-module="Offers" onclick="switchView('offers')">📋 <span>Teklifler</span>
+                    </div>
+                    <div class="menu-item" data-module="Invoices" onclick="switchView('invoices')">🧾
+                        <span>Faturalar</span>
+                    </div>
+                </div>
+
+                <div class="menu-group-label collapsed" onclick="toggleMenuGroup(this)">Sistem</div>
+                <div class="menu-group-content collapsed">
+                    <div class="menu-item" data-module="Users" onclick="switchView('users')">👥 <span>Kullanıcı
+                            Yönetimi</span></div>
+                    <div class="menu-item" data-module="Companies" onclick="switchView('companies')">🏢 <span>Firma
+                            Tanımları</span></div>
+                    <div class="menu-item" data-module="Users" onclick="switchView('titles')">🏷️ <span>Ünvan/Bölüm
+                            Tanımları</span></div>
+                    <div class="menu-item" data-module="System" onclick="switchView('settings')">⚙️ <span>Ayarlar</span>
+                    </div>
+                    <div class="menu-item" data-module="Logs" onclick="switchView('logs')">📜 <span>Denetim
+                            Kayıtları</span></div>
+                </div>
             </div>
 
-            <div style="margin-top: auto;">
-                <button class="btn-primary" style="background:var(--error);" onclick="logout()">Çıkış Yap</button>
+            <div style="margin-top: 2rem; padding: 1rem 0;">
+                <button class="btn-primary" style="background:var(--error); border-radius: 10px;"
+                    onclick="logout()">Çıkış Yap</button>
             </div>
         </div>
+
+        <button class="mobile-toggle" onclick="toggleSidebar()">☰</button>
 
         <!-- Main Content -->
         <div class="main-content">
             <header style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem;">
                 <h1><span id="pageTitle">Dashboard</span></h1>
                 <div style="text-align:right;">
-                    <div style="font-weight:bold;" id="userNameDisplay">...</div>
-                    <div class="badge"
-                        style="background:#e0e7ff; color:var(--primary); padding:0.25rem 0.5rem; border-radius:100px; font-size:0.8rem;">
-                        <span id="userRoleDisplay">...</span>
+                    <div class="user-profile-area" onclick="toggleUserDropdown(event)">
+                        <div style="font-weight:bold;" id="userNameDisplay">...</div>
+                        <div class="badge"
+                            style="background:#e0e7ff; color:var(--primary); padding:0.25rem 0.5rem; border-radius:100px; font-size:0.8rem;">
+                            <span id="userRoleDisplay">...</span>
+                        </div>
+                        <div class="user-dropdown" id="userDropdown">
+                            <div class="user-dropdown-item" onclick="switchView('profile')">👤 Profilim / Ayarlar</div>
+                            <div class="user-dropdown-item" onclick="logout()" style="color: var(--error);">🚪 Çıkış Yap
+                            </div>
+                        </div>
                     </div>
                 </div>
             </header>
@@ -102,24 +635,98 @@
                     style="display:grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 1.5rem;">
                     <div class="glass-card" style="text-align: left;">
                         <h3>Hızlı İşlemler</h3>
-                        <p>Sisteme yeni kullanıcı ekleyebilir veya stok kontrolü yapabilirsiniz.</p>
-                        <div style="display:flex; gap:0.5rem; flex-wrap:wrap; margin-top:1rem;">
-                            <button class="btn-primary" onclick="switchView('users')" style="width:auto;">Kullanıcıları
-                                Yönet</button>
-                            <button class="btn-primary" onclick="switchView('stock-entry')"
-                                style="width:auto; background:#10b981;">📦 Stok Girişi Yap</button>
-                            <button class="btn-primary" onclick="startOfferWizard()"
-                                style="width:auto; background:var(--primary);">✨ Teklif Oluştur</button>
+                        <p id="qaHint">Dashboard üzerinde görmek istediğiniz işlemleri ayarlar kısmından seçebilirsiniz.
+                        </p>
+                        <div style="display:flex; gap:1rem; flex-wrap:wrap; margin-top:1.5rem;"
+                            id="quickActionsContainer">
+                            <!-- Dynamically loaded -->
+                            <div style="color: var(--muted); font-size: 0.9rem;">Henüz hızlı işlem eklenmemiş...</div>
                         </div>
                     </div>
-
                 </div>
             </div>
 
-            <!-- SECTION: COMPANIES -->
+            <!-- SECTION: PROFILE / USER SETTINGS -->
+            <div id="section-profile" class="view-section" style="display:none;">
+                <div class="glass-card" style="text-align: left; max-width: 800px; margin: 0 auto;">
+                    <h3>Kullanıcı Profili ve Ayarlar</h3>
+
+                    <!-- Personal Info -->
+                    <div style="margin-top: 2rem;">
+                        <h4 style="border-bottom: 1px solid #eee; padding-bottom: 0.5rem; margin-bottom: 1rem;">Kişisel
+                            Bilgiler</h4>
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+                            <div class="form-group">
+                                <label>Ad</label>
+                                <input type="text" id="profileFirstName">
+                            </div>
+                            <div class="form-group">
+                                <label>Soyad</label>
+                                <input type="text" id="profileLastName">
+                            </div>
+                            <div class="form-group">
+                                <label>E-Posta</label>
+                                <input type="email" id="profileEmail">
+                            </div>
+                            <div class="form-group">
+                                <label>Sicil No</label>
+                                <input type="text" id="profileRegNo">
+                            </div>
+                        </div>
+                        <div style="text-align: right;">
+                            <button class="btn-primary" onclick="updateProfile()" style="width: auto;">Bilgileri
+                                Güncelle</button>
+                        </div>
+                    </div>
+
+                    <!-- Change Password -->
+                    <div style="margin-top: 2rem;">
+                        <h4 style="border-bottom: 1px solid #eee; padding-bottom: 0.5rem; margin-bottom: 1rem;">Şifre
+                            Değiştir</h4>
+                        <div class="form-group">
+                            <label>Mevcut Şifre</label>
+                            <input type="password" id="oldPassword">
+                        </div>
+                        <div class="form-group">
+                            <label>Yeni Şifre</label>
+                            <input type="password" id="newPassword" oninput="checkPasswordStrength(this.value)">
+                            <div class="pass-strength-meter">
+                                <div class="pass-strength-bar" id="passwordStrengthBar"></div>
+                            </div>
+                            <div class="pass-text" id="passwordStrengthText">Güçsüz</div>
+                        </div>
+                        <div class="form-group">
+                            <label>Yeni Şifre (Tekrar)</label>
+                            <input type="password" id="confirmPassword">
+                        </div>
+                        <div style="text-align: right;">
+                            <button class="btn-primary" onclick="changePassword()"
+                                style="width: auto; background-color: #28a745 !important; color: white;">Şifreyi
+                                Kaydet</button>
+                        </div>
+                    </div>
+
+                    <!-- Quick Actions -->
+                    <div style="margin-top: 2rem;">
+                        <h4 style="border-bottom: 1px solid #eee; padding-bottom: 0.5rem; margin-bottom: 1rem;">
+                            Dashboard Hızlı İşlemler</h4>
+                        <p style="font-size: 0.85rem; color: #64748b;">Dashboard ana sayfasında görmek istediğiniz
+                            butonları seçiniz:</p>
+
+                        <div class="qa-config-grid" id="qaConfigGrid">
+                            <!-- JS populated -->
+                        </div>
+
+                        <div style="margin-top: 1rem; text-align: right;">
+                            <button class="btn-primary" onclick="saveQuickActionSettings()"
+                                style="width: auto;">Ayarları Kaydet</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
             <div id="section-companies" class="view-section" style="display:none;">
                 <div style="margin-bottom: 1rem; display:flex; justify-content:flex-end;">
-                    <button class="btn-primary" onclick="openCompanyModal()" style="width: auto;">+ Yeni
+                    <button class="btn-create" data-permission="Companies:Write" onclick="openCompanyModal()">🏢 + Yeni
                         Şirket</button>
                 </div>
                 <div class="glass-card" style="padding:0; overflow-x:auto;">
@@ -143,31 +750,32 @@
 
             <!-- SECTION: INVENTORY -->
             <div id="section-inventory" class="view-section" style="display:none;">
-                <div style="margin-bottom:1rem; display:flex; gap:0.5rem; flex-wrap:wrap;">
-                    <button class="btn-primary tab-inv-btn" data-tab="products" onclick="switchInvTab('products')"
-                        style="width: auto;">Ürünler</button>
-                    <button class="btn-primary tab-inv-btn" data-tab="warehouses" onclick="switchInvTab('warehouses')"
-                        style="width: auto; background:#9ca3af;">Depolar</button>
-                    <button class="btn-primary tab-inv-btn" data-tab="brands" onclick="switchInvTab('brands')"
-                        style="width: auto; background:#9ca3af;">Markalar</button>
-                    <button class="btn-primary tab-inv-btn" data-tab="categories" onclick="switchInvTab('categories')"
-                        style="width: auto; background:#9ca3af;">Kategoriler</button>
-                    <button class="btn-primary tab-inv-btn" data-tab="units" onclick="switchInvTab('units')"
-                        style="width: auto; background:#9ca3af;">Birimler</button>
+                <div style="display:flex; gap:0.5rem; margin-bottom:1rem; flex-wrap:wrap;">
+                    <button class="tab-inv-btn active" data-tab="products" data-permission="Product:Read"
+                        onclick="switchInvTab('products')">📦 Ürünler</button>
+                    <button class="tab-inv-btn" data-tab="warehouses" data-permission="Warehouse:Read"
+                        onclick="switchInvTab('warehouses')">🏠 Depolar</button>
+                    <button class="tab-inv-btn" data-tab="brands" data-permission="Product:Read"
+                        onclick="switchInvTab('brands')">🏷️ Markalar</button>
+                    <button class="tab-inv-btn" data-tab="categories" data-permission="Category:Read"
+                        onclick="switchInvTab('categories')">📁 Kategoriler</button>
+                    <button class="tab-inv-btn" data-tab="units" data-permission="Product:Read"
+                        onclick="switchInvTab('units')">⚖️ Birimler</button>
                 </div>
 
                 <!-- TAB PRODUCTS -->
                 <div id="tab-inv-products" class="inv-tab">
                     <div style="margin-bottom: 1rem; display:flex; justify-content:flex-end;">
-                        <button class="btn-primary" onclick="openProductModal()"
-                            style="width: auto; background:#10b981;">+ Yeni Ürün</button>
+                        <button class="btn-create" onclick="openProductModal()" data-permission="Product:Write">📦 +
+                            Yeni Ürün</button>
                     </div>
                     <div class="glass-card" style="padding:0; overflow-x:auto;">
                         <table class="user-table">
                             <thead>
                                 <tr>
                                     <th>Resim</th>
-                                    <th>Kod</th>
+                                    <th>Ürün Kodu</th>
+                                    <th>Sistem Kodu</th>
                                     <th>Ad</th>
                                     <th>Kategori</th>
                                     <th>Marka</th>
@@ -188,8 +796,8 @@
                 <!-- TAB WAREHOUSES -->
                 <div id="tab-inv-warehouses" class="inv-tab" style="display:none;">
                     <div style="margin-bottom: 1rem; display:flex; justify-content:flex-end;">
-                        <button class="btn-primary" onclick="openWarehouseModal()"
-                            style="width: auto; background:#10b981;">+ Yeni Depo</button>
+                        <button class="btn-create" onclick="openWarehouseModal()" data-permission="Warehouse:Write">🏠 +
+                            Yeni Depo</button>
                     </div>
                     <div class="glass-card" style="padding:0; overflow-x:auto;">
                         <table class="user-table">
@@ -209,8 +817,8 @@
                 <!-- TAB BRANDS -->
                 <div id="tab-inv-brands" class="inv-tab" style="display:none;">
                     <div style="margin-bottom: 1rem; display:flex; justify-content:flex-end;">
-                        <button class="btn-primary" onclick="openSimpleModal('Brand')"
-                            style="width: auto; background:#10b981;">+ Marka</button>
+                        <button class="btn-create" onclick="openSimpleModal('Brand')"
+                            data-permission="Product:Write">🏷️ + Yeni Marka</button>
                     </div>
                     <div class="glass-card" style="padding:0; overflow-x:auto;">
                         <table class="user-table">
@@ -227,8 +835,8 @@
                 <!-- Other tabs simplified for brevity if needed in JS or expanded later -->
                 <div id="tab-inv-categories" class="inv-tab" style="display:none;">
                     <div style="margin-bottom: 1rem; display:flex; justify-content:flex-end;">
-                        <button class="btn-primary" onclick="openSimpleModal('Category')"
-                            style="width: auto; background:#10b981;">+ Kategori</button>
+                        <button class="btn-create" onclick="openSimpleModal('Category')"
+                            data-permission="Product:Write">📁 + Yeni Kategori</button>
                     </div>
                     <div class="glass-card" style="padding:0; overflow-x:auto;">
                         <table class="user-table">
@@ -244,8 +852,8 @@
                 </div>
                 <div id="tab-inv-units" class="inv-tab" style="display:none;">
                     <div style="margin-bottom: 1rem; display:flex; justify-content:flex-end;">
-                        <button class="btn-primary" onclick="openSimpleModal('Unit')"
-                            style="width: auto; background:#10b981;">+ Birim</button>
+                        <button class="btn-create" onclick="openSimpleModal('Unit')" data-permission="Product:Write">⚖️
+                            + Yeni Birim</button>
                     </div>
                     <div class="glass-card" style="padding:0; overflow-x:auto;">
                         <table class="user-table">
@@ -289,7 +897,7 @@
             <!-- SECTION: SUPPLIERS -->
             <div id="section-suppliers" class="view-section" style="display:none;">
                 <div style="margin-bottom: 1rem; display:flex; justify-content:flex-end;">
-                    <button class="btn-primary" onclick="openSupplierModal()" style="width: auto;">+ Yeni
+                    <button class="btn-create" data-permission="Supplier:Write" onclick="openSupplierModal()">🚚 + Yeni
                         Tedarikçi</button>
                 </div>
                 <div class="glass-card" style="padding:0; overflow-x:auto;">
@@ -315,8 +923,8 @@
             <!-- SECTION: PRICELISTS -->
             <div id="section-pricelists" class="view-section" style="display:none;">
                 <div style="margin-bottom: 1rem; display:flex; justify-content:flex-end;">
-                    <button class="btn-primary" onclick="openPriceListModal()" style="width: auto;">+ Yeni Fiyat
-                        Kaydı</button>
+                    <button class="btn-create" data-permission="PriceList:Write" onclick="openPriceListModal()">💰 +
+                        Yeni Fiyat Kaydı</button>
                 </div>
                 <div class="glass-card" style="padding:0; overflow-x:auto;">
                     <table class="user-table">
@@ -343,8 +951,8 @@
             <!-- SECTION: CUSTOMER COMPANIES -->
             <div id="section-customer-companies" class="view-section" style="display:none;">
                 <div style="margin-bottom: 1rem; display:flex; justify-content:flex-end;">
-                    <button class="btn-primary" onclick="openCustomerCompanyModal()" style="width: auto;">+ Yeni Müşteri
-                        Şirketi</button>
+                    <button class="btn-create" data-permission="Customer:Write" onclick="openCustomerCompanyModal()">🤝
+                        + Yeni Müşteri Şirketi</button>
                 </div>
                 <div class="glass-card" style="padding:0; overflow-x:auto;">
                     <table class="user-table">
@@ -368,7 +976,7 @@
             <!-- SECTION: CUSTOMERS -->
             <div id="section-customers" class="view-section" style="display:none;">
                 <div style="margin-bottom: 1rem; display:flex; justify-content:flex-end;">
-                    <button class="btn-primary" onclick="openCustomerModal()" style="width: auto;">+ Yeni
+                    <button class="btn-create" data-permission="Customer:Write" onclick="openCustomerModal()">👤 + Yeni
                         Müşteri</button>
                 </div>
                 <div class="glass-card" style="padding:0; overflow-x:auto;">
@@ -394,8 +1002,8 @@
             <!-- SECTION: OFFERS -->
             <div id="section-offers" class="view-section" style="display:none;">
                 <div style="margin-bottom: 1rem; display:flex; justify-content:flex-end;">
-                    <button class="btn-primary" onclick="startOfferWizard()" style="width: auto;">✨ Teklif
-                        Hazırla</button>
+                    <button class="btn-create" data-permission="Offers:Write" onclick="startOfferWizard()"
+                        style="background: var(--primary-gradient);">✨ Teklif Hazırla</button>
                 </div>
                 <div class="glass-card" style="padding:0; overflow-x:auto;">
                     <table class="user-table">
@@ -420,9 +1028,58 @@
             </div>
 
             <!-- SECTION: USERS -->
+            <!-- Warehouses Section -->
+            <div id="section-warehouses" class="view-section" style="display:none;">
+                <div class="glass-card">
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1.5rem;">
+                        <h2 style="margin:0;">Depo Tanımları</h2>
+                        <button class="btn-create" data-permission="Warehouse:Write" onclick="openWarehouseModal()">🏠 +
+                            Yeni Depo Ekle</button>
+                    </div>
+                    <div style="overflow-x:auto;">
+                        <table class="user-table">
+                            <thead>
+                                <tr>
+                                    <th>Depo Adı</th>
+                                    <th>Konum</th>
+                                    <th>Şirket</th>
+                                    <th style="text-align:right;">İşlemler</th>
+                                </tr>
+                            </thead>
+                            <tbody id="warehouseListBody_Main"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- SECTION: TITLES/DEPARTMENTS -->
+            <div id="section-titles" class="view-section" style="display:none;">
+                <div style="margin-bottom: 1rem; display:flex; justify-content:flex-end;">
+                    <button class="btn-create" data-permission="Users:Write" onclick="openTitleModal()">🏷️ + Yeni
+                        Ünvan/Bölüm</button>
+                </div>
+                <div class="glass-card" style="padding:0; overflow-x:auto;">
+                    <table class="user-table">
+                        <thead>
+                            <tr>
+                                <th>Ünvan / Bölüm Adı</th>
+                                <th>Bağlı Şirket</th>
+                                <th style="text-align:right;">İşlemler</th>
+                            </tr>
+                        </thead>
+                        <tbody id="titleListBody">
+                            <tr>
+                                <td colspan="3" style="text-align:center;">Yükleniyor...</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
             <div id="section-users" class="view-section" style="display:none;">
                 <div style="margin-bottom: 1rem; display:flex; justify-content:flex-end;">
-                    <button class="btn-primary" onclick="openModal()" style="width: auto;">+ Yeni Kullanıcı</button>
+                    <button class="btn-create" data-permission="Users:Write" onclick="openModal()">👥 + Yeni
+                        Kullanıcı</button>
                 </div>
                 <div class="glass-card" style="padding:0; overflow-x:auto;">
                     <table class="user-table">
@@ -431,6 +1088,7 @@
                                 <th>Kullanıcı Adı</th>
                                 <th>Ad Soyad</th>
                                 <th>Email</th>
+                                <th>Ünvan / Bölüm</th>
                                 <th>Rol</th>
                                 <th style="text-align:right;">İşlemler</th>
                             </tr>
@@ -446,40 +1104,157 @@
 
             <!-- SECTION: STOCK ENTRY -->
             <div id="section-stock-entry" class="view-section" style="display:none;">
-                <div class="glass-card" style="max-width:500px; margin: 0 auto; text-align: left;">
-                    <h3 style="margin-top:0;">Yeni Stok Girişi</h3>
-                    <p style="font-size:0.8rem; color:var(--muted); margin-bottom:1.5rem;">Ürün seçerek stok miktarını
-                        güncelleyebilirsiniz.</p>
+                <div style="max-width: 800px; margin: 0 auto;">
+                    <!-- Form Card -->
+                    <div class="glass-card" style="padding: 2.5rem;">
+                        <div style="display:flex; align-items:center; gap:0.75rem; margin-bottom:0.5rem;">
+                            <span style="font-size:2rem;">📦</span>
+                            <h2
+                                style="margin:0; font-weight:800; background:var(--primary-gradient); -webkit-background-clip:text; background-clip:text; -webkit-text-fill-color:transparent;">
+                                Stok Giriş Paneli</h2>
+                        </div>
+                        <p style="color: #64748b; font-size: 0.9rem; margin-bottom: 2rem;">Yeni sevkiyatları sisteme
+                            kaydetmek ve irsaliye yüklemek için bu paneli kullanın.</p>
 
-                    <div class="form-group">
-                        <label>Ürün Seçin</label>
-                        <select id="seProduct"
-                            style="width:100%; padding:0.5rem; border:1px solid #e5e7eb; border-radius:8px;">
-                            <option value="">Yükleniyor...</option>
-                        </select>
+                        <div class="form-group">
+                            <label>Tedarikçi Firma</label>
+                            <select id="seSupplier" class="form-control">
+                                <option value="">Tedarikçi Seçin...</option>
+                            </select>
+                        </div>
+
+                        <div class="grid" style="grid-template-columns: 1fr 1fr; gap:1.25rem; margin-top:1rem;">
+                            <div class="form-group">
+                                <label>Ürün</label>
+                                <select id="seProduct" class="form-control">
+                                    <option value="">Yükleniyor...</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label>Depo</label>
+                                <select id="seWarehouse" class="form-control">
+                                    <option value="">Yükleniyor...</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="grid" style="grid-template-columns: 1fr 1fr; gap:1.25rem; margin-top:1rem;">
+                            <div class="form-group">
+                                <label>İrsaliye / Fatura No</label>
+                                <input type="text" id="seDocumentNo" placeholder="Örn: IRS-2024-001"
+                                    class="form-control">
+                            </div>
+                            <div class="form-group">
+                                <label>Giriş Miktarı</label>
+                                <input type="number" id="seQuantity" placeholder="0.00" min="0" class="form-control">
+                            </div>
+                        </div>
+
+                        <div class="form-group" style="margin-top:1.5rem;">
+                            <label>İrsaliye Belgesi (Görsel veya PDF)</label>
+                            <div class="file-upload-wrapper" onclick="document.getElementById('seFile').click()">
+                                <input type="file" id="seFile" accept="image/*,.pdf" style="display:none;"
+                                    onchange="updateFileLabel(this)">
+                                <span style="font-size:1.5rem; display:block; margin-bottom:0.5rem;">📁</span>
+                                <div id="seFileLabel" style="font-weight:600; color:#1e293b;">Dosya Seçin veya
+                                    Sürükleyin</div>
+                                <div style="font-size:0.75rem; color:#94a3b8; margin-top:0.25rem;">Zorunlu değildir
+                                    (JPG, PNG, PDF)</div>
+                            </div>
+                        </div>
+
+                        <div class="form-group" style="margin-top:1.5rem;">
+                            <label>Notlar</label>
+                            <input type="text" id="seDescription" placeholder="Bu sevkiyat hakkında kısa notlar..."
+                                class="form-control">
+                        </div>
+
+                        <div style="margin-top: 2.5rem;">
+                            <button class="btn-confirm" onclick="submitStockEntry()">
+                                <span style="margin-right:0.5rem;">🚀</span> Kaydı Tamamla ve Stoğu Güncelle
+                            </button>
+                        </div>
                     </div>
+                </div>
+            </div>
 
-                    <div class="form-group">
-                        <label>Depo Seçin</label>
-                        <select id="seWarehouse"
-                            style="width:100%; padding:0.5rem; border:1px solid #e5e7eb; border-radius:8px;">
-                            <option value="">Yükleniyor...</option>
-                        </select>
+            <!-- SECTION: WAYBILL HISTORY -->
+            <div id="section-waybill-history" class="view-section" style="display:none;">
+                <div style="display:grid; grid-template-columns: 1fr; gap:2rem;">
+                    <div class="glass-card">
+                        <div
+                            style="display:flex; justify-content:space-between; align-items:center; margin-bottom:2rem; flex-wrap:wrap; gap:1rem;">
+                            <div>
+                                <h2
+                                    style="margin:0; font-weight:800; background:var(--primary-gradient); -webkit-background-clip:text; background-clip:text; -webkit-text-fill-color:transparent;">
+                                    İrsaliye Geçmişi</h2>
+                                <p style="color: #64748b; font-size: 0.9rem; margin: 0.5rem 0 0 0;">Kayıtlı tüm
+                                    irsaliyeleri filtreleyerek inceleyin.</p>
+                            </div>
+                            <div
+                                style="display: flex; gap: 1rem; align-items: flex-end; flex-wrap: wrap; flex: 1; justify-content: flex-end;">
+                                <div style="min-width: 200px;">
+                                    <label
+                                        style="font-size:0.75rem; color:#64748b; font-weight:700; margin-bottom:0.25rem; display:block;">TEDARİKÇİ</label>
+                                    <select id="whSupplier" onchange="runWaybillHistorySearch()" class="form-control"
+                                        style="background:white;">
+                                        <option value="">Tümü</option>
+                                    </select>
+                                </div>
+                                <div style="min-width: 150px;">
+                                    <label
+                                        style="font-size:0.75rem; color:#64748b; font-weight:700; margin-bottom:0.25rem; display:block;">İRSALİYE
+                                        NO</label>
+                                    <input type="text" id="whDocNo" oninput="runWaybillHistorySearch()"
+                                        class="form-control" placeholder="Ara..." style="background:white;">
+                                </div>
+                                <div style="width: 140px;">
+                                    <label
+                                        style="font-size:0.75rem; color:#64748b; font-weight:700; margin-bottom:0.25rem; display:block;">BAŞLANGIÇ</label>
+                                    <input type="date" id="whStartDate" onchange="runWaybillHistorySearch()"
+                                        class="form-control" style="background:white;">
+                                </div>
+                                <div style="width: 140px;">
+                                    <label
+                                        style="font-size:0.75rem; color:#64748b; font-weight:700; margin-bottom:0.25rem; display:block;">BİTİŞ</label>
+                                    <input type="date" id="whEndDate" onchange="runWaybillHistorySearch()"
+                                        class="form-control" style="background:white;">
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="custom-scrollbar" style="min-height: 400px; padding-bottom: 2rem;">
+                            <table class="waybill-table" style="width:100%;">
+                                <thead style="text-align:left;">
+                                    <tr style="background:transparent;">
+                                        <th
+                                            style="padding:1rem; color:#64748b; font-size:0.75rem; font-weight:800; text-transform:uppercase;">
+                                            İrsaliye No</th>
+                                        <th
+                                            style="padding:1rem; color:#64748b; font-size:0.75rem; font-weight:800; text-transform:uppercase;">
+                                            Ürün Bilgisi</th>
+                                        <th
+                                            style="padding:1rem; color:#64748b; font-size:0.75rem; font-weight:800; text-transform:uppercase;">
+                                            Tarih</th>
+                                        <th
+                                            style="padding:1rem; color:#64748b; font-size:0.75rem; font-weight:800; text-transform:uppercase;">
+                                            Miktar</th>
+                                        <th
+                                            style="padding:1rem; color:#64748b; font-size:0.75rem; font-weight:800; text-transform:uppercase;">
+                                            Belge</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="whHistoryBody">
+                                    <tr>
+                                        <td colspan="5" style="text-align:center; padding:5rem; color:#94a3b8;">
+                                            <div style="font-size:3rem; margin-bottom:1rem;">🔍</div>
+                                            Tedarikçi seçerek geçmiş irsaliyeleri görüntüleyin
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
                     </div>
-
-                    <div class="form-group">
-                        <label>Miktar</label>
-                        <input type="number" id="seQuantity" placeholder="Eklenecek stok miktarı" min="0"
-                            style="width:100%; padding:0.5rem; border:1px solid #e5e7eb; border-radius:8px;">
-                    </div>
-
-                    <div class="form-group">
-                        <label>Açıklama (Opsiyonel)</label>
-                        <input type="text" id="seDescription" placeholder="Örn: Yeni sevkiyat"
-                            style="width:100%; padding:0.5rem; border:1px solid #e5e7eb; border-radius:8px;">
-                    </div>
-
-                    <button class="btn-primary" onclick="submitStockEntry()" style="margin-top:1rem;">Stok Ekle</button>
                 </div>
             </div>
 
@@ -523,24 +1298,231 @@
 
             <!-- SECTION: SETTINGS -->
             <div id="section-settings" class="view-section" style="display:none;">
-                <div class="glass-card" style="text-align: left; margin-bottom: 2rem;">
-                    <h3>Sistem Durumu</h3>
-                    <div class="status-check" style="justify-content: flex-start; margin-bottom:0.5rem;">
-                        <div class="status-dot status-online"></div>
-                        <span>API Bağlantısı Aktif</span>
+                <!-- SYSTEM STATUS (ALWAYS VISIBLE) -->
+                <div class="glass-card"
+                    style="text-align: left; margin-bottom: 2rem; max-width: 100%; overflow: hidden;">
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 1rem;">
+                        <h2 style="margin:0; font-size:1.25rem;">🖥️ Sistem Paneli</h2>
+                        <div class="status-check" style="margin:0;">
+                            <div class="status-dot status-online"></div>
+                            <span style="font-size:0.85rem; font-weight:700; color:var(--success);">API ONLINE</span>
+                        </div>
                     </div>
-                    <div id="dashboardSysInfo" style="font-size:0.9rem; color:var(--muted);">
-                        Yükleniyor...
+
+                    <div class="settings-info-grid">
+                        <div class="info-card-compact">
+                            <label>Veritabanı Durumu</label>
+                            <span id="sysDbStatus">...</span>
+                        </div>
+                        <div class="info-card-compact">
+                            <label>Uygulama Versiyonu</label>
+                            <span id="sysVersion">...</span>
+                        </div>
+                        <div class="info-card-compact">
+                            <label>Çalışma Zamanı</label>
+                            <span id="sysRuntime">...</span>
+                        </div>
+                        <div class="info-card-compact">
+                            <label>İşletim Sistemi</label>
+                            <span id="sysOS">...</span>
+                        </div>
+                        <div class="info-card-compact">
+                            <label>Environment</label>
+                            <span id="sysEnv">...</span>
+                        </div>
+                        <div class="info-card-compact">
+                            <label>Sunucu Saati</label>
+                            <span id="sysTime">...</span>
+                        </div>
                     </div>
                 </div>
-                <div class="glass-card" style="text-align: left;">
-                    <h3>Sistem Bilgileri</h3>
-                    <p><strong>Veritabanı Durumu:</strong> <span id="sysDbStatus">...</span></p>
-                    <p><strong>Uygulama Versiyonu:</strong> <span id="sysVersion">...</span></p>
-                    <p><strong>Çalışma Zamanı:</strong> <span id="sysRuntime">...</span></p>
-                    <p><strong>İşletim Sistemi:</strong> <span id="sysOS">...</span></p>
-                    <p><strong>Environment:</strong> <span id="sysEnv">...</span></p>
-                    <p><strong>Sunucu Saati:</strong> <span id="sysTime">...</span></p>
+
+                <!-- SYSTEM SETTINGS (ROOT ONLY) -->
+                <div id="systemSettingsCard" class="collapsible-card" style="display:none;">
+                    <div class="collapsible-header" onclick="this.parentElement.classList.toggle('active')">
+                        <h3>⚙️ Sistem Ayarları (Root)</h3>
+                        <div class="collapsible-icon">▾</div>
+                    </div>
+                    <div class="collapsible-content">
+                        <div class="collapsible-inner">
+                            <div
+                                style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 1rem;">
+                                <p style="margin:0; font-size:0.9rem; color:var(--muted);">Sistem genelindeki güvenlik
+                                    ve şifre politikalarını yönetin.</p>
+                                <button class="btn-create" onclick="saveSystemSettings()">Kaydet</button>
+                            </div>
+                            <div class="form-group"
+                                style="display:flex; align-items:center; gap:0.75rem; background:#f8fafc; padding:1rem; border-radius:12px; border:1px solid #e2e8f0;">
+                                <input type="checkbox" id="forceStrongPassword" style="width:22px; height:22px;">
+                                <div>
+                                    <label for="forceStrongPassword"
+                                        style="margin:0; cursor:pointer; font-weight:700; color: var(--text);">Güçlü
+                                        Şifre
+                                        Zorunluluğu</label>
+                                    <div style="font-size: 0.8rem; color: var(--muted);">Aktif edilirse: En az 6
+                                        karakter,
+                                        büyük/küçük harf ve rakam içermelidir.</div>
+                                </div>
+                            </div>
+                            <div class="form-group"
+                                style="display:flex; align-items:center; gap:0.75rem; background:#f8fafc; padding:1rem; border-radius:12px; border:1px solid #e2e8f0; margin-top:1rem;">
+                                <div style="flex:1;">
+                                    <label style="margin:0; font-weight:700; color: var(--text);">Barkod Tipi</label>
+                                    <div style="font-size: 0.8rem; color: var(--muted);">Sistem genelinde ürün kodları
+                                        için kullanılacak format.</div>
+                                </div>
+                                <select id="sysBarcodeType" class="form-select" style="width: auto; min-width: 150px;">
+                                    <option value="QR">QR Kod</option>
+                                    <option value="Barcode">Barkod</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- MAIL SETTINGS (ROOT ONLY) -->
+                <div id="mailSettingsCard" class="collapsible-card" style="display:none;">
+                    <div class="collapsible-header" onclick="this.parentElement.classList.toggle('active')">
+                        <h3>📧 E-Posta Ayarları (SMTP)</h3>
+                        <div class="collapsible-icon">▾</div>
+                    </div>
+                    <div class="collapsible-content">
+                        <div class="collapsible-inner">
+                            <div
+                                style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 1.5rem;">
+                                <p style="margin:0; font-size:0.9rem; color:var(--muted);">Bildirimler için SMTP sunucu
+                                    yapılandırması.</p>
+                                <div style="display:flex; gap:0.5rem;">
+                                    <button class="btn-create" onclick="testMailSettings()"
+                                        style="background:var(--warning);">Sına</button>
+                                    <button class="btn-create" onclick="saveMailSettings()">Kaydet</button>
+                                </div>
+                            </div>
+                            <div class="grid" style="grid-template-columns: 3fr 1fr; gap:1rem;">
+                                <div class="form-group">
+                                    <label>SMTP Sunucu</label>
+                                    <input type="text" id="mailHost" placeholder="smtp.gmail.com" class="form-control">
+                                </div>
+                                <div class="form-group">
+                                    <label>Port</label>
+                                    <input type="number" id="mailPort" placeholder="587" class="form-control">
+                                </div>
+                            </div>
+                            <div class="grid" style="grid-template-columns: 1fr 1fr; gap:1rem; margin-top:1rem;">
+                                <div class="form-group">
+                                    <label>Kullanıcı Adı</label>
+                                    <input type="text" id="mailUser" placeholder="ornek@mail.com" class="form-control">
+                                </div>
+                                <div class="form-group">
+                                    <label>Şifre</label>
+                                    <input type="password" id="mailPass" placeholder="******" class="form-control">
+                                </div>
+                            </div>
+                            <div class="grid" style="grid-template-columns: 1fr 1fr; gap:1rem; margin-top:1rem;">
+                                <div class="form-group">
+                                    <label>Gönderen E-Posta</label>
+                                    <input type="email" id="mailFrom" placeholder="noreply@sirket.com"
+                                        class="form-control">
+                                </div>
+                                <div class="form-group">
+                                    <label>Gönderen Adı</label>
+                                    <input type="text" id="mailFromName" placeholder="S2O1 Sistemi"
+                                        class="form-control">
+                                </div>
+                            </div>
+                            <div class="form-group"
+                                style="display:flex; align-items:center; gap:0.5rem; margin-top:1rem;">
+                                <input type="checkbox" id="mailSsl" style="width:20px; height:20px;">
+                                <label for="mailSsl" style="margin:0; cursor:pointer; font-weight:600;">SSL/TLS
+                                    Etkin</label>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- DATABASE SETTINGS (ROOT ONLY) -->
+                <div id="dbSettingsCard" class="collapsible-card" style="display:none;">
+                    <div class="collapsible-header" onclick="this.parentElement.classList.toggle('active')">
+                        <h3>🗄️ Veritabanı Ayarları (Root)</h3>
+                        <div class="collapsible-icon">▾</div>
+                    </div>
+                    <div class="collapsible-content">
+                        <div class="collapsible-inner">
+                            <div
+                                style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 1rem;">
+                                <p style="margin:0; font-size:0.9rem; color:var(--error); font-weight:600;">⚠️ Kritik
+                                    Bağlantı Ayarları</p>
+                                <button class="btn-create" onclick="saveDbSettings()">Kaydet & Yeniden Başlat</button>
+                            </div>
+                            <div class="grid" style="grid-template-columns: 2fr 1fr; gap:1rem;">
+                                <div class="form-group">
+                                    <label>Sunucu (Server / Data Source)</label>
+                                    <input type="text" id="dbServer" placeholder="localhost" class="form-control">
+                                </div>
+                                <div class="form-group">
+                                    <label>Veritabanı Adı</label>
+                                    <input type="text" id="dbName" placeholder="StockDb" class="form-control">
+                                </div>
+                            </div>
+
+                            <div class="form-group"
+                                style="display:flex; align-items:center; gap:0.5rem; margin:1rem 0; background:#f1f5f9; padding:0.75rem; border-radius:8px;">
+                                <input type="checkbox" id="dbIntegrated" onchange="toggleDbAuth(this.checked)"
+                                    style="width:20px; height:20px;">
+                                <label for="dbIntegrated" style="margin:0; cursor:pointer; font-weight:700;">Windows
+                                    Authentication (Integrated Security)</label>
+                            </div>
+
+                            <div id="dbAuthInputs" class="grid" style="grid-template-columns: 1fr 1fr; gap:1rem;">
+                                <div class="form-group">
+                                    <label>Kullanıcı (User Id)</label>
+                                    <input type="text" id="dbUser" placeholder="sa" class="form-control">
+                                </div>
+                                <div class="form-group">
+                                    <label>Şifre (Password)</label>
+                                    <input type="password" id="dbPassword" placeholder="******" class="form-control">
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- SECTION: WAREHOUSE DASHBOARD (STOREKEEPER) -->
+            <div id="section-warehouse-dashboard" class="view-section" style="display:none;">
+                <div class="glass-card" style="margin-bottom: 2rem;">
+                    <h3>📦 Bekleyen Sevkiyatlar</h3>
+                    <p>Onaylanmış ancak henüz depodan çıkışı yapılmamış satışlar.</p>
+                </div>
+
+                <div id="pendingDeliveriesContainer" class="grid"
+                    style="grid-template-columns: repeat(auto-fill, minmax(350px, 1fr)); gap: 1.5rem;">
+                    <!-- Dynamically loaded -->
+                </div>
+            </div>
+
+            <!-- SECTION: SHELF MANAGEMENT -->
+            <div id="section-shelves" class="view-section" style="display:none;">
+                <div style="margin-bottom: 1rem; display:flex; justify-content:flex-end;">
+                    <button class="btn-create" onclick="openShelfModal()" data-permission="Warehouse:Write">🪜 + Yeni
+                        Raf</button>
+                </div>
+                <div class="glass-card" style="padding:0; overflow-x:auto;">
+                    <table class="user-table">
+                        <thead>
+                            <tr>
+                                <th>Depo</th>
+                                <th>Raf Adı</th>
+                                <th>Açıklama</th>
+                                <th style="text-align:right;">İşlemler</th>
+                            </tr>
+                        </thead>
+                        <tbody id="shelfListBody">
+                            <tr>
+                                <td colspan="4">Yükleniyor...</td>
+                            </tr>
+                        </tbody>
+                    </table>
                 </div>
             </div>
 
@@ -771,6 +1753,18 @@
 
             <!-- Step 4: Final Preview -->
             <div id="wizard-step-4" class="wizard-pane" style="display:none;">
+                <div
+                    style="background: #f9fafb; padding: 1rem; border-radius: 8px; margin-bottom: 1rem; display: flex; align-items: center; gap: 1rem; flex-wrap: wrap; border: 1px solid #e5e7eb;">
+                    <div style="display:flex; align-items:center; gap:0.5rem; flex:1; min-width: 250px;">
+                        <span style="font-size: 1.2rem;">📧</span>
+                        <input type="email" id="wizardEmailTo" placeholder="Alıcı E-Posta Adresi"
+                            style="flex:1; padding: 0.5rem; border: 1px solid #d1d5db; border-radius: 6px;">
+                    </div>
+                    <button class="btn-primary" onclick="sendOfferByEmail()"
+                        style="width: auto; background: var(--primary); padding: 0.5rem 1.5rem; font-size: 0.85rem;">
+                        📩 PDF Olarak Mail Gönder
+                    </button>
+                </div>
                 <div id="offerPreviewArea"
                     style="background: white; border: 1px solid #e5e7eb; padding: 2rem; border-radius: 8px; margin-bottom: 1.5rem;">
                 </div>
@@ -907,8 +1901,22 @@
             <h3>Yeni Ürün</h3>
             <input type="hidden" id="pId">
             <div class="grid" style="grid-template-columns: 1fr 1fr; gap:1rem;">
-                <div class="form-group"><input type="text" id="pCode" placeholder="Ürün Kodu"></div>
-                <div class="form-group"><input type="text" id="pName" placeholder="Ürün Adı"></div>
+                <div class="form-group">
+                    <label style="font-size:0.8rem; color:var(--muted); margin-bottom:0.2rem; display:block;">Ürün Kodu
+                        (Manuel)</label>
+                    <input type="text" id="pCode" placeholder="Ürün Kodu">
+                </div>
+                <div class="form-group">
+                    <label style="font-size:0.8rem; color:var(--muted); margin-bottom:0.2rem; display:block;">Sistem
+                        Kodu (Otomatik)</label>
+                    <input type="text" id="pSystemCode" placeholder="Sistem Tarafından Oluşturulur" disabled
+                        style="background:#f1f5f9; cursor:not-allowed;">
+                </div>
+            </div>
+            <div class="form-group" style="margin-top:0.5rem;">
+                <label style="font-size:0.8rem; color:var(--muted); margin-bottom:0.2rem; display:block;">Ürün
+                    Adı</label>
+                <input type="text" id="pName" placeholder="Ürün Adı">
             </div>
             <div class="grid" style="grid-template-columns: 1fr 1fr; gap:1rem;">
                 <div class="form-group">
@@ -923,6 +1931,33 @@
                         <option>Marka Seç...</option>
                     </select>
                 </div>
+            </div>
+            <div class="grid" style="grid-template-columns: 1fr 1fr; gap:1rem;">
+                <div class="form-group">
+                    <select id="pWarehouse" onchange="loadShelvesForProduct(this.value)"
+                        style="width:100%; padding:0.5rem; border:1px solid #e5e7eb; border-radius:8px;">
+                        <option value="">Depo Seç...</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <select id="pShelf"
+                        style="width:100%; padding:0.5rem; border:1px solid #e5e7eb; border-radius:8px;">
+                        <option value="">Raf Seç...</option>
+                    </select>
+                </div>
+            </div>
+            <div class="form-group"
+                style="margin-top:0.5rem; background: #f8fafc; padding: 0.75rem; border-radius: 12px; border: 1px solid #e2e8f0;">
+                <label
+                    style="display:flex; align-items:center; cursor:pointer; justify-content: space-between; margin:0;">
+                    <div style="flex:1;">
+                        <span style="font-weight:700; color: var(--text); display:block;">📦 Fiziksel Ürün Mü?</span>
+                        <small style="color: var(--muted); font-size: 0.75rem;">Aktifse sevkiyat/irsaliye süreçlerine
+                            dahil edilir.</small>
+                    </div>
+                    <input type="checkbox" id="pIsPhysical" checked
+                        style="width:24px; height:24px; accent-color: var(--primary);">
+                </label>
             </div>
             <div class="grid" style="grid-template-columns: 1fr; gap:1rem;">
                 <div class="form-group">
@@ -986,22 +2021,41 @@
     <div id="userModal"
         style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); z-index:1000; align-items:center; justify-content:center;">
         <div class="glass-card" style="max-width:400px; padding:2rem; background:white;">
-            <h3 style="margin-top:0;">Yeni Kullanıcı</h3>
-            <div class="form-group"><input type="text" id="uName" placeholder="Kullanıcı Adı"></div>
-            <div class="form-group"><input type="password" id="uPass" placeholder="Şifre"></div>
+            <h3 id="userModalTitle" style="margin-top:0;">Yeni Kullanıcı</h3>
+            <input type="hidden" id="uId">
+            <div class="form-group" id="uNameGroup"><input type="text" id="uName" placeholder="Kullanıcı Adı"></div>
+            <div class="form-group" id="uPassGroup"><input type="password" id="uPass" placeholder="Şifre"></div>
             <div class="form-group"><input type="text" id="uFirst" placeholder="Ad"></div>
             <div class="form-group"><input type="text" id="uLast" placeholder="Soyad"></div>
             <div class="form-group"><input type="email" id="uEmail" placeholder="Email"></div>
             <div class="form-group"><input type="text" id="uReg" placeholder="Sicil No"></div>
             <div class="form-group">
+                <label>Rol</label>
                 <select id="uRole" style="width:100%; padding:0.5rem; border:1px solid #e5e7eb; border-radius:8px;">
                     <option value="2">Admin</option>
                     <option value="3">User</option>
                 </select>
             </div>
-            <div style="display:flex; gap:1rem;">
-                <button class="btn-primary" onclick="createUser()">Kaydet</button>
-                <button class="btn-primary" onclick="closeModal()" style="background:#9ca3af;">İptal</button>
+            <div class="form-group">
+                <label>Şirket</label>
+                <select id="uCompany" style="width:100%; padding:0.5rem; border:1px solid #e5e7eb; border-radius:8px;">
+                    <option value="">Şirket Seçin...</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label>Ünvan / Bölüm</label>
+                <select id="uTitle" style="width:100%; padding:0.5rem; border:1px solid #e5e7eb; border-radius:8px;">
+                    <option value="">Seçiniz...</option>
+                </select>
+            </div>
+            <div class="form-group" id="uIsActiveGroup" style="display:none;">
+                <label style="display:flex; align-items:center; gap:0.5rem;">
+                    <input type="checkbox" id="uIsActive" checked> Aktif Kullanıcı
+                </label>
+            </div>
+            <div style="display:flex; gap:1rem; margin-top:1rem;">
+                <button class="btn-primary" onclick="saveUser()">Kaydet</button>
+                <button class="btn-primary" onclick="closeModal('userModal')" style="background:#9ca3af;">İptal</button>
             </div>
         </div>
     </div>
@@ -1022,6 +2076,7 @@
                     <thead style="position:sticky; top:0; background:#f9fafb;">
                         <tr>
                             <th style="padding:0.75rem;">Modül</th>
+                            <th style="text-align:center;">Tam Yetki</th>
                             <th style="text-align:center;">Okuma</th>
                             <th style="text-align:center;">Yazma</th>
                             <th style="text-align:center;">Silme</th>
@@ -1057,7 +2112,153 @@
         </div>
     </div>
 
-    <script src="js/app.js?v=4"></script>
+    <!-- Title Modal -->
+    <div id="titleModal" class="modal-overlay"
+        style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); z-index:1000; align-items:center; justify-content:center;">
+        <div class="glass-card" style="max-width:400px; padding:2rem; background:white;">
+            <h3>Ünvan/Bölüm Tanımı</h3>
+            <input type="hidden" id="tId">
+            <div class="form-group">
+                <label>Ünvan / Bölüm Adı</label>
+                <input type="text" id="tName" placeholder="Örn: Satış Müdürü, Depo Sorumlusu">
+            </div>
+            <div class="form-group">
+                <label>Bağlı Şirket</label>
+                <select id="tCompany" style="width:100%; padding:0.5rem; border:1px solid #e5e7eb; border-radius:8px;">
+                    <option value="">Şirket Seçin...</option>
+                </select>
+            </div>
+            <div style="display:flex; gap:1rem; margin-top:1rem;">
+                <button class="btn-primary" onclick="saveTitle()">Kaydet</button>
+                <button class="btn-primary" onclick="closeModal('titleModal')"
+                    style="background:#9ca3af;">İptal</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Title Permissions Modal -->
+    <div id="titlePermissionsModal" class="modal-overlay"
+        style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); z-index:1000; align-items:center; justify-content:center;">
+        <div class="glass-card" style="max-width:600px; padding:2rem; background:white; width:90%; border-radius:12px;">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem;">
+                <h3 style="margin:0;">Ünvan Yetkileri: <span id="tpTitleName">...</span></h3>
+                <button onclick="closeModal('titlePermissionsModal')"
+                    style="border:none; background:transparent; font-size:1.5rem; cursor:pointer;">&times;</button>
+            </div>
+            <input type="hidden" id="tpTitleId">
+            <div
+                style="overflow-y:auto; max-height:60vh; margin-bottom:1rem; border:1px solid #f3f4f6; border-radius:8px;">
+                <table class="user-table" style="width:100%;">
+                    <thead style="position:sticky; top:0; background:#f9fafb;">
+                        <tr>
+                            <th style="padding:0.75rem;">Modül</th>
+                            <th style="text-align:center;">Tam Yetki</th>
+                            <th style="text-align:center;">Okuma</th>
+                            <th style="text-align:center;">Yazma</th>
+                            <th style="text-align:center;">Silme</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tpListBody">
+                        <tr>
+                            <td colspan="5">Yükleniyor...</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+            <div style="display:flex; justify-content:flex-end; gap:1rem;">
+                <button class="btn-primary" onclick="saveTitlePermissions()">Değişiklikleri Kaydet</button>
+                <button class="btn-primary" onclick="closeModal('titlePermissionsModal')"
+                    style="background:#9ca3af;">Kapat</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Warehouse Prep (Basket) Modal -->
+    <div id="warehousePrepModal" class="modal-overlay"
+        style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); z-index:1000; align-items:center; justify-content:center;">
+        <div class="glass-card"
+            style="width: 90%; max-width: 1000px; max-height: 90vh; overflow-y: auto; background: white; padding: 2rem;">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1.5rem;">
+                <h3 id="prepModalTitle">📦 Sevkiyat Hazırlama</h3>
+                <button onclick="closeModal('warehousePrepModal')"
+                    style="background:none; border:none; font-size:1.5rem; cursor:pointer;">&times;</button>
+            </div>
+
+            <div class="grid" style="grid-template-columns: 2fr 1fr; gap: 2rem;">
+                <div>
+                    <h4>🛒 Ürün Sepeti</h4>
+                    <div style="margin-bottom: 1rem; display:flex; gap:0.5rem;">
+                        <input type="text" id="prepBarcodeScan" class="form-control"
+                            placeholder="Barkod / QR Taratın veya Kod Yazın..."
+                            onkeypress="if(event.key==='Enter') prepScanItem()">
+                        <button class="btn-primary" onclick="prepScanItem()" style="width:auto;">Ekle</button>
+                    </div>
+
+                    <div class="glass-card" style="padding:0; overflow-x:auto;">
+                        <table class="user-table">
+                            <thead>
+                                <tr>
+                                    <th>Ürün</th>
+                                    <th>Konum</th>
+                                    <th>Miktar</th>
+                                    <th>İrsaliye</th>
+                                    <th style="text-align:right;">İşlem</th>
+                                </tr>
+                            </thead>
+                            <tbody id="prepBasketBody">
+                                <!-- JS -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div style="background: #f8fafc; padding: 1.5rem; border-radius: 20px;">
+                    <h4>🚛 Teslimat Bilgileri</h4>
+                    <div class="form-group">
+                        <label>Teslim Eden (Depocu)</label>
+                        <input type="text" id="prepDeliverer" class="form-control" readonly>
+                    </div>
+                    <div class="form-group" style="margin-top:1rem;">
+                        <label>Teslim Alan (İsim Soyisim)</label>
+                        <input type="text" id="prepReceiver" class="form-control" placeholder="Müşteri / Yetkili Adı">
+                    </div>
+
+                    <div style="margin-top: 2rem;">
+                        <button class="btn-confirm" onclick="completePrep()">Sevkiyatı Tamamla</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Shelf Modal -->
+    <div id="shelfModal" class="modal-overlay"
+        style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); z-index:1000; align-items:center; justify-content:center;">
+        <div class="glass-card" style="max-width:400px; padding:2rem; background:white;">
+            <h3>Raf Tanımı</h3>
+            <input type="hidden" id="shelfId">
+            <div class="form-group">
+                <label>Depo Seçin</label>
+                <select id="shelfWarehouseId" class="form-select"></select>
+            </div>
+            <div class="form-group" style="margin-top:1rem;">
+                <label>Raf Adı (Örn: A-1, B-Rafı)</label>
+                <input type="text" id="shelfName" class="form-control" placeholder="Raf Adı">
+            </div>
+            <div class="form-group" style="margin-top:1rem;">
+                <label>Açıklama</label>
+                <input type="text" id="shelfDescription" class="form-control" placeholder="Açıklama">
+            </div>
+            <div style="display:flex; gap:1rem; margin-top:2rem;">
+                <button class="btn-primary" onclick="saveShelf()">Kaydet</button>
+                <button class="btn-primary" onclick="closeModal('shelfModal')"
+                    style="background:#9ca3af;">İptal</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="js/app.js?v=12"></script>
+    <script src="js/title_management.js?v=2"></script>
     <script>
         document.addEventListener('DOMContentLoaded', () => {
             checkAuth();

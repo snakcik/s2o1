@@ -6,10 +6,10 @@ namespace S2O1.Domain.Entities
 {
     public class SystemSetting : BaseEntity
     {
-        public string SettingKey { get; set; }
-        public string SettingValue { get; set; }
-        public string LogoAscii { get; set; }
-        public string AppVersion { get; set; }
+        public string SettingKey { get; set; } = string.Empty;
+        public string SettingValue { get; set; } = string.Empty;
+        public string? LogoAscii { get; set; }
+        public string? AppVersion { get; set; }
     }
 
     public class LicenseInfo : BaseEntity
@@ -30,8 +30,11 @@ namespace S2O1.Domain.Entities
         public string ActionType { get; set; } // Create, Update, etc.
         public string EntityName { get; set; }
         public string EntityId { get; set; }
+        public string? EntityDisplay { get; set; } // Human readable name (e.g. Product Name)
         public string ActionDescription { get; set; }
         public string Source { get; set; } // CLI, API, System
         public string IPAddress { get; set; }
+        public string? OldValues { get; set; } // JSON format
+        public string? NewValues { get; set; } // JSON format
     }
 }

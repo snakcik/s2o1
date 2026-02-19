@@ -16,6 +16,7 @@ namespace S2O1.API.Controllers
         }
 
         [HttpGet]
+        [Filters.Permission("Warehouse", "Read")]
         public async Task<IActionResult> GetAll()
         {
             var list = await _warehouseService.GetAllAsync();
@@ -23,6 +24,7 @@ namespace S2O1.API.Controllers
         }
 
         [HttpPost]
+        [Filters.Permission("Warehouse", "Write")]
         public async Task<IActionResult> Create([FromBody] CreateWarehouseDto dto)
         {
             try
@@ -37,6 +39,7 @@ namespace S2O1.API.Controllers
         }
 
         [HttpPut]
+        [Filters.Permission("Warehouse", "Write")]
         public async Task<IActionResult> Update([FromBody] UpdateWarehouseDto dto)
         {
             var updated = await _warehouseService.UpdateAsync(dto);
@@ -45,9 +48,50 @@ namespace S2O1.API.Controllers
         }
 
         [HttpDelete("{id}")]
+        [Filters.Permission("Warehouse", "Delete")]
         public async Task<IActionResult> Delete(int id)
         {
             var res = await _warehouseService.DeleteAsync(id);
+            if (!res) return NotFound();
+            return Ok();
+        }
+
+        [HttpGet("shelves")]
+        [Filters.Permission("Warehouse", "Read")]
+        public async Task<IActionResult> GetAllShelves()
+        {
+            var list = await _warehouseService.GetAllShelvesAsync();
+            return Ok(list);
+        }
+
+        [HttpGet("{id}/shelves")]
+        [Filters.Permission("Warehouse", "Read")]
+        public async Task<IActionResult> GetShelves(int id)
+        {
+            var list = await _warehouseService.GetShelvesAsync(id);
+            return Ok(list);
+        }
+
+        [HttpPost("shelves")]
+        [Filters.Permission("Warehouse", "Write")]
+        public async Task<IActionResult> CreateShelf([FromBody] CreateWarehouseShelfDto dto)
+        {
+            try
+            {
+               var created = await _warehouseService.CreateShelfAsync(dto);
+               return Ok(created);
+            }
+            catch (System.Exception ex)
+            {
+                return BadRequest(new { message = ex.Message });
+            }
+        }
+
+        [HttpDelete("shelves/{id}")]
+        [Filters.Permission("Warehouse", "Delete")]
+        public async Task<IActionResult> DeleteShelf(int id)
+        {
+            var res = await _warehouseService.DeleteShelfAsync(id);
             if (!res) return NotFound();
             return Ok();
         }

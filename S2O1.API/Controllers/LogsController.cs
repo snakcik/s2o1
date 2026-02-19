@@ -25,40 +25,22 @@ namespace S2O1.API.Controllers
         // Shows recent changes from all tables (Products, etc.)
         // Filters out 'root' user changes.
         [HttpGet]
+        [Filters.Permission("Logs", "Read")]
         public async Task<IActionResult> GetLogs()
         {
-             // Since we don't have a single "AuditLog" table populated yet, 
-             // we will query recent modifications on key tables.
-             // Or, if the user requested "AuditLogs" table, we check if it is populated.
-             // Given the limited scope, let's look at Products, Warehouses as example.
+             var userRole = _currentUserService.UserRole;
+             var query = _context.AuditLogs.AsQueryable();
 
-             // Filter logic: Ignore changes by 'root'. Assuming 'root' has a specific ID (e.g. 1) or Name.
-             // The user said "root kullanıcısının yaptığı değişiklikler gözükmeyecek".
-             // We need to know who is root. Usually ID 1.
+             // Anayasa Rule 426: Root user invisibility.
+             // Only Root can see Root actions.
+             if (string.IsNullOrEmpty(userRole) || !userRole.Equals("root", System.StringComparison.OrdinalIgnoreCase))
+             {
+                 query = query.Where(a => a.ActorRole != "root" && a.ActorRole != "Root");
+             }
 
-             var products = await _context.Products
-                 .Where(p => !p.IsDeleted) // or include deleted if soft deleted
-                 .OrderByDescending(p => p.CreateDate)
-                 .Take(50)
-                 .Select(p => new 
-                 {
-                     Entity = "Product",
-                     Id = p.Id,
-                     Name = p.ProductName,
-                     UpdatedBy = p.UpdatedByUserId,
-                     CreatedBy = p.CreatedByUserId,
-                     Date = p.CreateDate
-                 }).ToListAsync();
-
-             // This is a naive implementation. Ideally we use AuditLogs table.
-             // If we really want to capture ALL changes, we need Interceptor or AuditLog entries.
-             // But for now, let's return what we have on entities.
-             
-             // Filter out 'Root' users
-             var auditLogs = await _context.AuditLogs
-                                .Where(a => a.ActorRole != "Root")
+             var auditLogs = await query
                                 .OrderByDescending(a => a.CreateDate)
-                                .Take(100)
+                                .Take(200)
                                 .ToListAsync();
 
              return Ok(auditLogs);

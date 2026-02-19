@@ -249,5 +249,52 @@ namespace S2O1.Business.Services.Implementation
                 UnitName = p.Unit?.UnitName ?? "Birim Belirtilmemiş"
             });
         }
+
+        public async Task<IEnumerable<WaybillDto>> GetWaybillsBySupplierAsync(int supplierId)
+        {
+            return await SearchWaybillsAsync(null, null, null, supplierId);
+        }
+
+        public async Task<IEnumerable<WaybillDto>> SearchWaybillsAsync(string? waybillNo, DateTime? startDate, DateTime? endDate, int? supplierId)
+        {
+            var query = _unitOfWork.Repository<StockMovement>().Query()
+                .Include(m => m.Supplier)
+                .Where(m => m.MovementType == MovementType.Entry);
+
+            if (!string.IsNullOrEmpty(waybillNo))
+            {
+                query = query.Where(m => m.DocumentNo.Contains(waybillNo));
+            }
+
+            if (startDate.HasValue)
+            {
+                query = query.Where(m => m.MovementDate >= startDate.Value);
+            }
+
+            if (endDate.HasValue)
+            {
+                var nextDay = endDate.Value.AddDays(1);
+                query = query.Where(m => m.MovementDate < nextDay);
+            }
+
+            if (supplierId.HasValue && supplierId > 0)
+            {
+                query = query.Where(m => m.SupplierId == supplierId.Value);
+            }
+
+            var movements = await query.OrderByDescending(m => m.MovementDate).ToListAsync();
+
+            // Group by DocumentNo to show unique waybills
+            return movements.GroupBy(m => m.DocumentNo)
+                .Select(g => new WaybillDto
+                {
+                    WaybillNo = g.Key ?? "Dökümansız",
+                    Date = g.Max(m => m.MovementDate),
+                    SupplierName = g.First().Supplier?.SupplierCompanyName ?? "Bilinmiyor",
+                    Description = g.First().Description,
+                    DocumentPath = g.First().DocumentPath,
+                    TotalQuantity = g.Sum(m => m.Quantity)
+                });
+        }
     }
 }

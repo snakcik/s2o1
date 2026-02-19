@@ -10,6 +10,8 @@ namespace S2O1.Business.DTOs.Auth
         public string RegNo { get; set; }
         public int RoleId { get; set; }
         public int? CompanyId { get; set; }
+        public int? TitleId { get; set; }
         public bool IsActive { get; set; }
+        public string? QuickActionsJson { get; set; }
     }
 }

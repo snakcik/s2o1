@@ -25,6 +25,7 @@ namespace S2O1.DataAccess.Contexts
         public DbSet<Role> Roles { get; set; }
         public DbSet<Module> Modules { get; set; }
         public DbSet<UserPermission> UserPermissions { get; set; }
+        public DbSet<TitlePermission> TitlePermissions { get; set; }
         public DbSet<UserApiKey> UserApiKeys { get; set; }
         public DbSet<SystemSetting> SystemSettings { get; set; }
         public DbSet<LicenseInfo> LicenseInfos { get; set; }
@@ -35,6 +36,9 @@ namespace S2O1.DataAccess.Contexts
         public DbSet<Title> Titles { get; set; }
         public DbSet<Warehouse> Warehouses { get; set; }
         public DbSet<ProductLocation> ProductLocations { get; set; }
+        public DbSet<WarehouseShelf> WarehouseShelves { get; set; }
+        public DbSet<DispatchNote> DispatchNotes { get; set; }
+        public DbSet<DispatchNoteItem> DispatchNoteItems { get; set; }
 
         // Product & Stock
         public DbSet<Brand> Brands { get; set; }
@@ -75,9 +79,15 @@ namespace S2O1.DataAccess.Contexts
                 {
                     // Using EF Core generic SetQueryFilter method dynamically might be complex here.
                     // For simplicity and robustness in this generated code, I'll rely on the specific Configurations 
-                    // or implement a helper.
-                    // Actually, let's put it in the Configuration classes or use a loop here.
-                    
+                    // Only Root can see Root actions.
+             // This code snippet seems to be misplaced. It looks like logic for filtering audit logs based on user role,
+             // which typically belongs in a service or controller layer when querying AuditLogs, not in OnModelCreating.
+             // Inserting it here would cause compilation errors as 'userRole' and 'query' are undefined in this context.
+             // As per instructions to make the change faithfully, but also to ensure syntactic correctness,
+             // and given this is a DbContext file, this specific snippet cannot be directly applied here.
+             // The instruction "Simplify the Where clause in LogsController to use simple inequality instead of StringComparison.OrdinalIgnoreCase in the lambda"
+             // refers to a LogsController, not the DbContext.
+             // Therefore, I will proceed with the rest of the file as is, as this specific edit is not applicable or syntactically valid here.
                     var method = SetGlobalQueryMethod.MakeGenericMethod(entityType.ClrType);
                     method.Invoke(this, new object[] { modelBuilder });
                 }
@@ -134,21 +144,54 @@ namespace S2O1.DataAccess.Contexts
                  if (entry.State == EntityState.Detached || entry.State == EntityState.Unchanged) continue;
                  if (entry.Entity is AuditLog) continue; 
 
-                 var audit = new AuditLog
-                 {
-                     ActionType = entry.State.ToString(),
-                     EntityName = entry.Entity.GetType().Name,
-                     CreateDate = System.DateTime.Now,
-                     ActorUserId = userId,
-                     ActorUserName = _currentUserService.UserName ?? "System",
-                     ActorRole = _currentUserService.UserRole ?? "Unknown",
-                     Source = _currentUserService.Source ?? "System",
-                     IPAddress = _currentUserService.IpAddress ?? "::1",
-                     EntityId = entry.Entity.Id.ToString(), // Will be 0 for Added
-                     ActionDescription = $"{entry.State} operation on {entry.Entity.GetType().Name}"
-                 };
-                 auditEntryPairs.Add((entry, audit));
-             }
+                var audit = new AuditLog
+                {
+                    ActionType = entry.State.ToString(),
+                    EntityName = entry.Entity.GetType().Name,
+                    CreateDate = System.DateTime.Now,
+                    ActorUserId = userId,
+                    ActorUserName = _currentUserService.UserName ?? "System",
+                    ActorRole = _currentUserService.UserRole ?? "Unknown",
+                    Source = _currentUserService.Source ?? "System",
+                    IPAddress = _currentUserService.IpAddress ?? "::1",
+                    EntityId = entry.Entity.Id.ToString(),
+                    EntityDisplay = GetEntityDisplayName(entry.Entity),
+                    ActionDescription = GetTurkishActionDescription(entry.State, entry.Entity.GetType().Name)
+                };
+
+                Console.WriteLine($"[AUDIT] {audit.ActionDescription} | Yapan: {audit.ActorUserName}");
+
+                var oldValues = new System.Collections.Generic.Dictionary<string, object>();
+                var newValues = new System.Collections.Generic.Dictionary<string, object>();
+
+                foreach (var property in entry.Properties)
+                {
+                    string propertyName = property.Metadata.Name;
+                    if (propertyName == "RowVersion") continue;
+
+                    switch (entry.State)
+                    {
+                        case EntityState.Added:
+                            newValues[propertyName] = property.CurrentValue;
+                            break;
+                        case EntityState.Deleted:
+                            oldValues[propertyName] = property.OriginalValue;
+                            break;
+                        case EntityState.Modified:
+                            if (property.IsModified)
+                            {
+                                oldValues[propertyName] = property.OriginalValue;
+                                newValues[propertyName] = property.CurrentValue;
+                            }
+                            break;
+                    }
+                }
+
+                if (oldValues.Any()) audit.OldValues = System.Text.Json.JsonSerializer.Serialize(oldValues);
+                if (newValues.Any()) audit.NewValues = System.Text.Json.JsonSerializer.Serialize(newValues);
+
+                auditEntryPairs.Add((entry, audit));
+            }
 
              var result = await base.SaveChangesAsync(cancellationToken);
 
@@ -167,6 +210,37 @@ namespace S2O1.DataAccess.Contexts
              }
              
             return result;
+        }
+        private string? GetEntityDisplayName(BaseEntity entity)
+        {
+            var type = entity.GetType();
+            var props = type.GetProperties();
+            
+            // Priority list for display names
+            var priorityNames = new[] { "ProductName", "UserName", "RoleName", "CompanyName", "TitleName", "CategoryName", "BrandName", "UnitName", "WarehouseName", "SettingKey", "KeyName" };
+            
+            foreach (var name in priorityNames)
+            {
+                var prop = props.FirstOrDefault(p => p.Name == name);
+                if (prop != null)
+                {
+                    return prop.GetValue(entity)?.ToString();
+                }
+            }
+            
+            return null;
+        }
+
+        private string GetTurkishActionDescription(EntityState state, string entityName)
+        {
+            string action = state switch
+            {
+                EntityState.Added => "Eklendi",
+                EntityState.Modified => "Güncellendi",
+                EntityState.Deleted => "Silindi",
+                _ => state.ToString()
+            };
+            return $"{entityName} {action}";
         }
     }
 }
