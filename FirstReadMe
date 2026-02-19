@@ -1,0 +1,6 @@
+defoult olan connection string i değiştirilmesi gerekli
+"DefaultConnection": "Server=(localdb)\\MSSQLLocalDB;Database=2S1O;Integrated Security=true;TrustServerCertificate=True;"
+bu konteynerde çalışmıyor konteynerde çalışması için 
+"DefaultConnection": "Server=db;Database=StockDb;User Id=sa;Password=Q1w2e3r4!;Integrated Security=false;TrustServerCertificate=True;"
+gibi kullanıcı adı şifre barındıran bir yapıya geçilmesi gerekli
+yada containner de docker composefile de CLI uygulamasınıda ayağa kaldırmamız gerekli ki cli üzeirinden veritabanı bağlantısı işlerini ekleyebileyim.
