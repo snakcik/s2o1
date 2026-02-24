@@ -56,18 +56,7 @@ namespace S2O1.CLI.Helpers
 
         public static void StartInactivityMonitor()
         {
-            Task.Run(async () =>
-            {
-                while (true)
-                {
-                    if (DateTime.Now - LastActivity > TimeSpan.FromMinutes(1))
-                    {
-                        Console.WriteLine("\n\n[TIMEOUT] Inactivity detected. Logging out...");
-                        Environment.Exit(0);
-                    }
-                    await Task.Delay(1000); // Check every second
-                }
-            });
+            // Removed for Docker interactivity
         }
 
         public static string ReadLine()

@@ -27,9 +27,9 @@ namespace S2O1.API.Controllers
 
         [HttpGet]
         [Filters.Permission("Users", "Read")]
-        public async Task<IActionResult> GetAllUsers([FromQuery] int? creatorId)
+        public async Task<IActionResult> GetAllUsers([FromQuery] int? creatorId, [FromQuery] string? status = null)
         {
-            var users = await _authService.GetAllUsersAsync(creatorId);
+            var users = await _authService.GetAllUsersAsync(creatorId, status);
             return Ok(users);
         }
 
@@ -196,6 +196,15 @@ namespace S2O1.API.Controllers
             return Ok(titles);
         }
 
+        [HttpGet("titles/{id}")]
+        [Filters.Permission("Users", "Read")]
+        public async Task<IActionResult> GetTitleById(int id)
+        {
+            var title = await _authService.GetTitleByIdAsync(id);
+            if (title == null) return NotFound();
+            return Ok(title);
+        }
+
         [HttpGet("titles/company/{companyId}")]
         [Filters.Permission("Users", "Read")]
         public async Task<IActionResult> GetTitlesByCompany(int companyId)
@@ -210,6 +219,21 @@ namespace S2O1.API.Controllers
         {
             var title = await _authService.CreateTitleAsync(dto);
             return Ok(title);
+        }
+
+        [HttpPut("titles/{id}")]
+        [Filters.Permission("Users", "Write")]
+        public async Task<IActionResult> UpdateTitle(int id, [FromBody] CreateTitleDto dto)
+        {
+            try
+            {
+                var title = await _authService.UpdateTitleAsync(id, dto);
+                return Ok(title);
+            }
+            catch (System.Exception ex)
+            {
+                return BadRequest(new { message = ex.Message });
+            }
         }
 
         [HttpDelete("titles/{id}")]

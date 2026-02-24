@@ -4,32 +4,55 @@ services:
     container_name: s2o1_db
     environment:
       - ACCEPT_EULA=Y
-      - MSSQL_SA_PASSWORD=SqlPassword123!
+      - MSSQL_SA_PASSWORD=Q1w2e3r4!
       - MSSQL_PID=Developer
     ports:
       - "1433:1433"
     volumes:
       - mssql_data:/var/opt/mssql
     healthcheck:
-      test: [ "CMD-SHELL", "/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P 'SqlPassword123!' -Q 'SELECT 1' -b -C" ]
+      test: [ "CMD-SHELL", "/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P 'Q1w2e3r4!' -Q 'SELECT 1' -b -C" ]
       interval: 10s
       timeout: 3s
       retries: 10
 
   api:
-    image: ${DOCKER_USERNAME:-snakcik}/s2o1:latest
-    build:
-      context: .
-      dockerfile: Dockerfile
+    image: ${DOCKER_IMAGE_NAME:-snakcik/s2o1}:latest
     container_name: s2o1_api
+    restart: always
     ports:
       - "5267:5267"
     environment:
-      - ConnectionStrings__DefaultConnection=Server=db;Database=2S1O;User Id=sa;Password=SqlPassword123!;TrustServerCertificate=True;
-      - ASPNETCORE_ENVIRONMENT=Production
+      ConnectionStrings__DockerConnection: "Server=db;Database=2S1O;User Id=sa;Password=Q1w2e3r4!;Encrypt=True;TrustServerCertificate=True;"
+      ASPNETCORE_ENVIRONMENT: "Production"
+      DOTNET_RUNNING_IN_CONTAINER: "true"
     depends_on:
       db:
         condition: service_healthy
+
+  cli:
+    image: ${DOCKER_IMAGE_NAME:-snakcik/s2o1}:latest
+    container_name: s2o1_cli
+    restart: always
+    stdin_open: true
+    tty: true
+    entrypoint: [ "dotnet", "cli/S2O1.CLI.dll" ]
+    environment:
+      DOTNET_RUNNING_IN_CONTAINER: "true"
+    depends_on:
+      db:
+        condition: service_healthy
+
+  watchtower:
+    image: containrrr/watchtower
+    container_name: s2o1_watchtower
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      - WATCHTOWER_POLL_INTERVAL=300
+      - WATCHTOWER_CLEANUP=true
+      - WATCHTOWER_INCLUDE_RESTARTING=true
+    restart: always
 
 volumes:
   mssql_data:

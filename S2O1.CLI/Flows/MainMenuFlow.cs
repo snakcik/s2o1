@@ -42,6 +42,7 @@ namespace S2O1.CLI.Flows
                     "Db-setup: Database Wizard",
                     "API Key Management",
                     "System Work Mode (Master/Slave)",
+                    "Deployment Environment (Dev/Prod)",
                     "Licence Settings",
                     "System Statistics & Security Reset",
                     "Log out"
@@ -54,9 +55,10 @@ namespace S2O1.CLI.Flows
                     case 0: await RunDbSetup(); break;
                     case 1: await RunApiKeyManagement(); break;
                     case 2: await RunSystemWorkMode(); break;
-                    case 3: await RunLicenceSettings(); break;
-                    case 4: await RunStatistics(); break;
-                    case 5: 
+                    case 3: await RunDeploymentEnvironment(); break;
+                    case 4: await RunLicenceSettings(); break;
+                    case 5: await RunStatistics(); break;
+                    case 6: 
                         ConsoleHelper.PrintInfo("Logging out...");
                         return;
                 }
@@ -269,6 +271,43 @@ namespace S2O1.CLI.Flows
                         }
                         else break;
                     }
+                }
+                else return;
+            }
+        }
+        #endregion
+
+        #region 3a. Deployment Environment
+        private async Task RunDeploymentEnvironment()
+        {
+            while (true)
+            {
+                var currentEnv = await GetSettingAsync("DeploymentEnvironment") ?? "Production";
+                
+                var options = new List<string>
+                {
+                    $"Set Environment: Production {(currentEnv == "Production" ? "[CURRENT]" : "")}",
+                    $"Set Environment: Development (Enables Swagger API Docs) {(currentEnv == "Development" ? "[CURRENT]" : "")}",
+                    "Back to Main Menu"
+                };
+
+                int envChoice = MenuHelper.ShowMenu($"Deployment Environment (Current: {currentEnv})", options);
+
+                if (envChoice == 0) // Production
+                {
+                    await SetSettingAsync("DeploymentEnvironment", "Production");
+                    ConsoleHelper.PrintSuccess("Environment set to Production.");
+                    ConsoleHelper.PrintWarning("Please restart the API container (e.g., docker restart s2o1_api) for changes to take effect.");
+                    await LogActionAsync("Update Environment", "Set to Production");
+                    ConsoleHelper.ReadLine();
+                }
+                else if (envChoice == 1) // Development
+                {
+                    await SetSettingAsync("DeploymentEnvironment", "Development");
+                    ConsoleHelper.PrintSuccess("Environment set to Development. Swagger API docs will be enabled.");
+                    ConsoleHelper.PrintWarning("Please restart the API container (e.g., docker restart s2o1_api) for changes to take effect.");
+                    await LogActionAsync("Update Environment", "Set to Development");
+                    ConsoleHelper.ReadLine();
                 }
                 else return;
             }

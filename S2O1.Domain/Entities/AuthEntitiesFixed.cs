@@ -19,6 +19,8 @@ namespace S2O1.Domain.Entities
     public class Company : BaseEntity
     {
         public string CompanyName { get; set; }
+        public string? TaxNumber { get; set; }
+        public string? Address { get; set; }
         public bool AllowNegativeStock { get; set; }
         public ICollection<User> Users { get; set; }
         public ICollection<Warehouse> Warehouses { get; set; }

@@ -20,6 +20,7 @@ namespace S2O1.Business.DTOs.Auth
         public int? TitleId { get; set; }
         public string? TitleName { get; set; }
         public bool IsActive { get; set; }
+        public bool IsDeleted { get; set; }
         public string? QuickActionsJson { get; set; }
         public System.Collections.Generic.List<UserPermissionDto> Permissions { get; set; } = new();
     }

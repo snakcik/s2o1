@@ -12,7 +12,7 @@ namespace S2O1.Business.Services.Interfaces
         Task<string> GenerateTokenAsync(UserDto user);
         Task<UserDto> CreateUserAsync(CreateUserDto createUserDto);
         Task<bool> AssignRoleAsync(int userId, int roleId);
-        Task<IEnumerable<UserDto>> GetAllUsersAsync(int? currentUserId = null);
+        Task<IEnumerable<UserDto>> GetAllUsersAsync(int? currentUserId = null, string? status = null);
         Task<IEnumerable<ModuleDto>> GetAllModulesAsync();
         Task<IEnumerable<UserPermissionDto>> GetUserPermissionsAsync(int userId);
         Task<bool> SaveUserPermissionsAsync(int userId, IEnumerable<UserPermissionDto> permissions);
@@ -25,8 +25,10 @@ namespace S2O1.Business.Services.Interfaces
         
         // Title Management
         Task<IEnumerable<TitleDto>> GetAllTitlesAsync();
+        Task<TitleDto> GetTitleByIdAsync(int id);
         Task<IEnumerable<TitleDto>> GetTitlesByCompanyAsync(int companyId);
         Task<TitleDto> CreateTitleAsync(CreateTitleDto dto);
+        Task<TitleDto> UpdateTitleAsync(int id, CreateTitleDto dto);
         Task<bool> DeleteTitleAsync(int id);
         
         // Title Permissions
@@ -42,8 +44,10 @@ namespace S2O1.Business.Services.Interfaces
 
     public interface ICompanyService
     {
-        Task<IEnumerable<CompanyDto>> GetAllAsync();
+        Task<IEnumerable<CompanyDto>> GetAllAsync(string? status = null);
+        Task<CompanyDto> GetByIdAsync(int id);
         Task<CompanyDto> CreateAsync(CreateCompanyDto dto);
+        Task<CompanyDto> UpdateAsync(int id, CreateCompanyDto dto);
         Task<bool> DeleteAsync(int id);
     }
 
@@ -53,19 +57,20 @@ namespace S2O1.Business.Services.Interfaces
         Task<decimal> GetProductStockAsync(int productId, int warehouseId);
         Task<System.Collections.Generic.IEnumerable<WarehouseStockReportDto>> GetWarehouseStockReportAsync(int? warehouseId);
         Task<System.Collections.Generic.IEnumerable<WaybillDto>> GetWaybillsBySupplierAsync(int supplierId);
-        Task<System.Collections.Generic.IEnumerable<WaybillDto>> SearchWaybillsAsync(string? waybillNo, System.DateTime? startDate, System.DateTime? endDate, int? supplierId);
+        Task<System.Collections.Generic.IEnumerable<WaybillDto>> SearchWaybillsAsync(string? waybillNo, System.DateTime? startDate, System.DateTime? endDate, int? supplierId, string? type);
+        Task<System.Collections.Generic.IEnumerable<WaybillItemDto>> GetWaybillItemsAsync(string waybillNo);
     }
 
     public interface IWarehouseService
     {
-        Task<IEnumerable<WarehouseDto>> GetAllAsync();
+        Task<IEnumerable<WarehouseDto>> GetAllAsync(string? status = null, string? searchTerm = null);
         Task<WarehouseDto> GetByIdAsync(int id);
         Task<WarehouseDto> CreateAsync(CreateWarehouseDto dto);
         Task<WarehouseDto> UpdateAsync(UpdateWarehouseDto dto);
         Task<bool> DeleteAsync(int id);
 
         // Shelves
-        Task<IEnumerable<WarehouseShelfDto>> GetAllShelvesAsync();
+        Task<IEnumerable<WarehouseShelfDto>> GetAllShelvesAsync(string? status = null);
         Task<IEnumerable<WarehouseShelfDto>> GetShelvesAsync(int warehouseId);
         Task<WarehouseShelfDto> CreateShelfAsync(CreateWarehouseShelfDto dto);
         Task<bool> DeleteShelfAsync(int id);
@@ -74,11 +79,11 @@ namespace S2O1.Business.Services.Interfaces
     public interface IProductService
     {
         Task<ProductDto> GetByIdAsync(int id);
-        Task<System.Collections.Generic.IEnumerable<ProductDto>> GetAllAsync();
+        Task<System.Collections.Generic.IEnumerable<ProductDto>> GetAllAsync(string? status = null, string? searchTerm = null);
         Task<ProductDto> CreateAsync(CreateProductDto dto);
-        Task<System.Collections.Generic.IEnumerable<BrandDto>> GetAllBrandsAsync();
-        Task<System.Collections.Generic.IEnumerable<CategoryDto>> GetAllCategoriesAsync();
-        Task<System.Collections.Generic.IEnumerable<UnitDto>> GetAllUnitsAsync();
+        Task<System.Collections.Generic.IEnumerable<BrandDto>> GetAllBrandsAsync(string? status = null, string? searchTerm = null);
+        Task<System.Collections.Generic.IEnumerable<CategoryDto>> GetAllCategoriesAsync(string? status = null, string? searchTerm = null);
+        Task<System.Collections.Generic.IEnumerable<UnitDto>> GetAllUnitsAsync(string? status = null, string? searchTerm = null);
         
         Task<BrandDto> CreateBrandAsync(CreateBrandDto dto);
         Task<CategoryDto> CreateCategoryAsync(CreateCategoryDto dto);
@@ -100,7 +105,7 @@ namespace S2O1.Business.Services.Interfaces
     {
         Task ApproveOfferAsync(int offerId, int approverUserId);
         Task<int> CreateInvoiceFromOfferAsync(int offerId, int userId);
-        Task<IEnumerable<S2O1.Business.DTOs.Stock.OfferDto>> GetAllAsync();
+        Task<IEnumerable<S2O1.Business.DTOs.Stock.OfferDto>> GetAllAsync(string? status = null);
         Task<S2O1.Business.DTOs.Stock.OfferDto> GetByIdAsync(int id);
         Task<S2O1.Business.DTOs.Stock.OfferDto> CreateAsync(S2O1.Business.DTOs.Stock.CreateOfferDto dto);
         Task<S2O1.Business.DTOs.Stock.OfferDto> UpdateAsync(int id, S2O1.Business.DTOs.Stock.CreateOfferDto dto);
@@ -110,9 +115,11 @@ namespace S2O1.Business.Services.Interfaces
     public interface IInvoiceService
     {
         Task<InvoiceDto> GetByIdAsync(int id);
-        Task<IEnumerable<InvoiceDto>> GetAllAsync();
+        Task<InvoiceDto> GetByNumberAsync(string invoiceNumber);
+        Task<IEnumerable<InvoiceDto>> GetAllAsync(string? status = null);
         Task<InvoiceDto> CreateAsync(CreateInvoiceDto dto);
         Task<bool> ApproveInvoiceAsync(int invoiceId, int approverUserId);
+        Task<bool> RejectInvoiceAsync(int invoiceId);
         
         // Warehouse Workflow
         Task<IEnumerable<InvoiceDto>> GetPendingDeliveriesAsync();
@@ -122,7 +129,7 @@ namespace S2O1.Business.Services.Interfaces
 
     public interface ISupplierService
     {
-        Task<IEnumerable<S2O1.Business.DTOs.Business.SupplierDto>> GetAllAsync();
+        Task<IEnumerable<S2O1.Business.DTOs.Business.SupplierDto>> GetAllAsync(string? status = null);
         Task<S2O1.Business.DTOs.Business.SupplierDto> GetByIdAsync(int id);
         Task<S2O1.Business.DTOs.Business.SupplierDto> CreateAsync(S2O1.Business.DTOs.Business.CreateSupplierDto dto);
         Task<S2O1.Business.DTOs.Business.SupplierDto> UpdateAsync(S2O1.Business.DTOs.Business.UpdateSupplierDto dto);
@@ -131,7 +138,7 @@ namespace S2O1.Business.Services.Interfaces
 
     public interface IPriceListService
     {
-        Task<IEnumerable<PriceListDto>> GetAllAsync();
+        Task<IEnumerable<PriceListDto>> GetAllAsync(string? status = null);
         Task<PriceListDto> GetByIdAsync(int id);
         Task<PriceListDto> CreateAsync(CreatePriceListDto dto);
         Task<PriceListDto> UpdateAsync(UpdatePriceListDto dto);
@@ -141,14 +148,14 @@ namespace S2O1.Business.Services.Interfaces
     public interface ICustomerService
     {
         // Customer Company
-        Task<IEnumerable<CustomerCompanyDto>> GetAllCompaniesAsync();
+        Task<IEnumerable<CustomerCompanyDto>> GetAllCompaniesAsync(string? status = null);
         Task<CustomerCompanyDto> GetCompanyByIdAsync(int id);
         Task<CustomerCompanyDto> CreateCompanyAsync(CreateCustomerCompanyDto dto);
         Task<CustomerCompanyDto> UpdateCompanyAsync(UpdateCustomerCompanyDto dto);
         Task<bool> DeleteCompanyAsync(int id);
 
         // Customer (Contact)
-        Task<IEnumerable<CustomerDto>> GetAllCustomersAsync();
+        Task<IEnumerable<CustomerDto>> GetAllCustomersAsync(string? status = null);
         Task<CustomerDto> GetCustomerByIdAsync(int id);
         Task<CustomerDto> CreateCustomerAsync(CreateCustomerDto dto);
         Task<CustomerDto> UpdateCustomerAsync(UpdateCustomerDto dto);

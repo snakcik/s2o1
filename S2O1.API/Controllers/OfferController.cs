@@ -39,9 +39,9 @@ namespace S2O1.API.Controllers
 
         [HttpGet]
         [Filters.Permission("Offers", "Read")]
-        public async Task<ActionResult<IEnumerable<OfferDto>>> GetAll()
+        public async Task<ActionResult<IEnumerable<OfferDto>>> GetAll([FromQuery] string? status = null)
         {
-            var offers = await _offerService.GetAllAsync();
+            var offers = await _offerService.GetAllAsync(status);
             return Ok(offers);
         }
 

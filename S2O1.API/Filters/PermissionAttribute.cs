@@ -4,18 +4,27 @@ using Microsoft.EntityFrameworkCore;
 using S2O1.Core.Interfaces;
 using S2O1.DataAccess.Contexts;
 using S2O1.Domain.Entities;
+using System.Linq;
 using System.Threading.Tasks;
 
 namespace S2O1.API.Filters
 {
     public class PermissionAttribute : ActionFilterAttribute
     {
-        private readonly string _moduleName;
+        private readonly string[] _moduleNames;
         private readonly string _permissionType; // Read, Write, Delete
 
+        // Single module constructor (backward compatible)
         public PermissionAttribute(string moduleName, string permissionType)
         {
-            _moduleName = moduleName;
+            _moduleNames = new[] { moduleName };
+            _permissionType = permissionType;
+        }
+
+        // Multiple modules constructor (OR logic - user needs permission in ANY of the modules)
+        public PermissionAttribute(string[] moduleNames, string permissionType)
+        {
+            _moduleNames = moduleNames;
             _permissionType = permissionType;
         }
 
@@ -32,7 +41,6 @@ namespace S2O1.API.Filters
             }
 
             // Root user bypasses all checks
-            // Root user has id 1 in this system
             if (userId == 1)
             {
                 await next();
@@ -40,17 +48,20 @@ namespace S2O1.API.Filters
             }
 
             var hasPermission = await dbContext.UserPermissions
-                .Include(p => p.Module)
-                .AnyAsync(p => p.UserId == userId.Value && 
-                               p.Module.ModuleName == _moduleName &&
-                               (p.IsFull || 
+                .AnyAsync(p => p.UserId == userId.Value &&
+                               _moduleNames.Any(name => name.ToLower() == p.Module.ModuleName.ToLower()) &&
+                               (p.IsFull ||
                                 (_permissionType == "Read" && p.CanRead) ||
                                 (_permissionType == "Write" && p.CanWrite) ||
                                 (_permissionType == "Delete" && p.CanDelete)));
 
             if (!hasPermission)
             {
-                context.Result = new ObjectResult(new { message = $"'{_moduleName}' modülünde '{_permissionType}' yetkiniz bulunmamaktadır." }) 
+                var moduleList = string.Join(", ", _moduleNames);
+                // Debug info: Show which user and which modules failed
+                context.Result = new ObjectResult(new { 
+                    message = $"Erişim Engellendi. Modüller: [{moduleList}], Yetki: {_permissionType}, Kullanıcı ID: {userId.Value}. Lütfen yöneticinizle iletişime geçin." 
+                }) 
                 { 
                     StatusCode = 403 
                 };

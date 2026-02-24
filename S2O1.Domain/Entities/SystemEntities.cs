@@ -37,4 +37,14 @@ namespace S2O1.Domain.Entities
         public string? OldValues { get; set; } // JSON format
         public string? NewValues { get; set; } // JSON format
     }
+
+    public class SystemQueueTask : BaseEntity
+    {
+        public string TaskType { get; set; } = string.Empty;
+        public string Payload { get; set; } = string.Empty; // JSON
+        public string Status { get; set; } = "Pending"; // Pending, Processing, Completed, Failed
+        public int RetryCount { get; set; } = 0;
+        public string? ErrorMessage { get; set; }
+        public DateTime? ProcessedDate { get; set; }
+    }
 }

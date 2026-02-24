@@ -20,15 +20,15 @@ namespace S2O1.API.Controllers
         // --- Customer Company Endpoints ---
 
         [HttpGet("companies")]
-        [Filters.Permission("Customer", "Read")]
-        public async Task<ActionResult<IEnumerable<CustomerCompanyDto>>> GetAllCompanies()
+        [Filters.Permission(new[] { "Customer", "Offers" }, "Read")]
+        public async Task<ActionResult<IEnumerable<CustomerCompanyDto>>> GetAllCompanies([FromQuery] string? status = null)
         {
-            var result = await _customerService.GetAllCompaniesAsync();
+            var result = await _customerService.GetAllCompaniesAsync(status);
             return Ok(result);
         }
 
         [HttpGet("companies/{id}")]
-        [Filters.Permission("Customer", "Read")]
+        [Filters.Permission(new[] { "Customer", "Offers" }, "Read")]
         public async Task<ActionResult<CustomerCompanyDto>> GetCompanyById(int id)
         {
             var result = await _customerService.GetCompanyByIdAsync(id);
@@ -65,15 +65,15 @@ namespace S2O1.API.Controllers
         // --- Customer Endpoints ---
 
         [HttpGet]
-        [Filters.Permission("Customer", "Read")]
-        public async Task<ActionResult<IEnumerable<CustomerDto>>> GetAllCustomers()
+        [Filters.Permission(new[] { "Customer", "Offers" }, "Read")]
+        public async Task<ActionResult<IEnumerable<CustomerDto>>> GetAllCustomers([FromQuery] string? status = null)
         {
-            var result = await _customerService.GetAllCustomersAsync();
+            var result = await _customerService.GetAllCustomersAsync(status);
             return Ok(result);
         }
 
         [HttpGet("{id}")]
-        [Filters.Permission("Customer", "Read")]
+        [Filters.Permission(new[] { "Customer", "Offers" }, "Read")]
         public async Task<ActionResult<CustomerDto>> GetCustomerById(int id)
         {
             var result = await _customerService.GetCustomerByIdAsync(id);

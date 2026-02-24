@@ -38,7 +38,7 @@ COPY --from=publish /app/publish_api .
 COPY --from=publish /app/publish_cli ./cli
 
 # Create a pre-configured dbconfig.txt for CLI inside Docker
-RUN echo "Server=db;Database=2S1O;User Id=sa;Password=SqlPassword123!;TrustServerCertificate=True;" > ./cli/dbconfig.txt
+RUN echo "Server=db;Database=2S1O;User Id=sa;Password=Q1w2e3r4!;Encrypt=True;TrustServerCertificate=True;" > ./cli/dbconfig.txt
 # Create the installation flag for Linux so CLI doesn't ask for setup
 RUN mkdir -p /etc/2s1o && echo "Installed=true" > /etc/2s1o/installed.flag
 

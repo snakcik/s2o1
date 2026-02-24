@@ -18,13 +18,15 @@ namespace S2O1.Business.Services.Implementation
         private readonly IMapper _mapper;
         private readonly IPasswordHasher _passwordHasher;
         private readonly IMailService _mailService;
+        private readonly ICurrentUserService _currentUserService;
 
-        public AuthService(IUnitOfWork unitOfWork, IMapper mapper, IPasswordHasher passwordHasher, IMailService mailService)
+        public AuthService(IUnitOfWork unitOfWork, IMapper mapper, IPasswordHasher passwordHasher, IMailService mailService, ICurrentUserService currentUserService)
         {
             _unitOfWork = unitOfWork;
             _mapper = mapper;
             _passwordHasher = passwordHasher;
             _mailService = mailService;
+            _currentUserService = currentUserService;
         }
 
         public async Task<UserDto?> LoginAsync(LoginDto loginDto)
@@ -192,18 +194,29 @@ namespace S2O1.Business.Services.Implementation
             return true;
         }
 
-        public async Task<IEnumerable<UserDto>> GetAllUsersAsync(int? currentUserId = null)
+        public async Task<IEnumerable<UserDto>> GetAllUsersAsync(int? currentUserId = null, string? status = null)
         {
-            IEnumerable<User> users;
+            var canSeeDeleted = await CanSeeDeletedAsync();
+            var query = _unitOfWork.Repository<User>().Query();
 
-            var query = _unitOfWork.Repository<User>().Query().Include(u => u.Title).Where(u => !u.IsDeleted);
+            if (canSeeDeleted)
+            {
+                query = query.IgnoreQueryFilters().Include(u => u.Title);
+                if (status == "passive") query = query.Where(u => u.IsDeleted);
+                else if (status == "all") query = query.Where(u => true);
+                else query = query.Where(u => !u.IsDeleted);
+            }
+            else
+            {
+                query = query.Include(u => u.Title).Where(u => !u.IsDeleted);
+            }
 
             if (currentUserId.HasValue)
             {
                 query = query.Where(u => u.CreatedByUserId == currentUserId.Value);
             }
 
-            users = await query.ToListAsync();
+            var users = await query.OrderByDescending(x => x.Id).ToListAsync();
 
             var dtos = new System.Collections.Generic.List<UserDto>();
             var roles = await _unitOfWork.Repository<Role>().GetAllAsync();
@@ -223,8 +236,38 @@ namespace S2O1.Business.Services.Implementation
 
         public async Task<IEnumerable<ModuleDto>> GetAllModulesAsync()
         {
+            // Whitelist: Only modules that correspond to real API permission attributes.
+            // Prevents showing duplicate/entity-noise modules like Offer/Offers, Invoice/Invoices.
+            var validModules = new HashSet<string>(System.StringComparer.OrdinalIgnoreCase)
+            {
+                "Warehouse", "WarehouseManagement",
+                "Stock", "Sales",
+                "Product", "Category", "Brand",
+                "Supplier", "Customer",
+                "Offers", "Invoices",
+                "PriceList",
+                "Users", "Companies", "System", "Logs", "Reports",
+                "Auth"
+            };
+
+            // Ensure special module exists in DB
+            var existingMod = await _unitOfWork.Repository<Module>().Query().FirstOrDefaultAsync(m => m.ModuleName == "ShowDeletedItems");
+            if (existingMod == null)
+            {
+                await _unitOfWork.Repository<Module>().AddAsync(new Module { ModuleName = "ShowDeletedItems", IsActive = true });
+                await _unitOfWork.SaveChangesAsync();
+            }
+
+            // ADDED: Special permission only root can see/assign
+            if (_currentUserService.IsRoot)
+            {
+                validModules.Add("ShowDeletedItems");
+            }
+
             var modules = await _unitOfWork.Repository<Module>().GetAllAsync();
-            return modules.Select(m => new ModuleDto { Id = m.Id, Name = m.ModuleName });
+            return modules
+                .Where(m => validModules.Contains(m.ModuleName))
+                .Select(m => new ModuleDto { Id = m.Id, Name = m.ModuleName });
         }
 
         public async Task<IEnumerable<UserPermissionDto>> GetUserPermissionsAsync(int userId)
@@ -254,8 +297,15 @@ namespace S2O1.Business.Services.Implementation
             var repo = _unitOfWork.Repository<UserPermission>();
             var existingPermissions = (await repo.FindAsync(p => p.UserId == userId)).ToList();
             
+            // PROTECT: Find the ShowDeletedItems module ID
+            var showDeletedMod = await _unitOfWork.Repository<Module>().Query().FirstOrDefaultAsync(m => m.ModuleName == "ShowDeletedItems");
+
             foreach(var dto in permissions)
             {
+                // PROTECT: Only root can change ShowDeletedItems permission
+                if (showDeletedMod != null && dto.ModuleId == showDeletedMod.Id && !_currentUserService.IsRoot)
+                    continue;
+
                 if (dto.IsFull)
                 {
                     dto.CanRead = true;
@@ -511,8 +561,14 @@ namespace S2O1.Business.Services.Implementation
         // Title Management
         public async Task<IEnumerable<TitleDto>> GetAllTitlesAsync()
         {
-            var titles = await _unitOfWork.Repository<Title>().GetAllAsync();
+            var titles = await _unitOfWork.Repository<Title>().Query().OrderByDescending(x => x.Id).ToListAsync();
             return _mapper.Map<IEnumerable<TitleDto>>(titles);
+        }
+
+        public async Task<TitleDto> GetTitleByIdAsync(int id)
+        {
+            var title = await _unitOfWork.Repository<Title>().GetByIdAsync(id);
+            return _mapper.Map<TitleDto>(title);
         }
 
         public async Task<IEnumerable<TitleDto>> GetTitlesByCompanyAsync(int companyId)
@@ -525,6 +581,18 @@ namespace S2O1.Business.Services.Implementation
         {
             var title = _mapper.Map<Title>(dto);
             await _unitOfWork.Repository<Title>().AddAsync(title);
+            await _unitOfWork.SaveChangesAsync();
+            return _mapper.Map<TitleDto>(title);
+        }
+
+        public async Task<TitleDto> UpdateTitleAsync(int id, CreateTitleDto dto)
+        {
+            var title = await _unitOfWork.Repository<Title>().GetByIdAsync(id);
+            if (title == null) throw new Exception("Ünvan bulunamadı.");
+
+            title.TitleName = dto.TitleName;
+            title.CompanyId = dto.CompanyId;
+
             await _unitOfWork.SaveChangesAsync();
             return _mapper.Map<TitleDto>(title);
         }
@@ -603,6 +671,16 @@ namespace S2O1.Business.Services.Implementation
             
             await _unitOfWork.SaveChangesAsync();
             return true;
+        }
+
+        private async Task<bool> CanSeeDeletedAsync()
+        {
+            if (_currentUserService.IsRoot) return true;
+            return await _unitOfWork.Repository<UserPermission>().Query()
+                .Include(p => p.Module)
+                .AnyAsync(p => p.UserId == _currentUserService.UserId && 
+                               p.Module.ModuleName == "ShowDeletedItems" && 
+                               (p.CanRead || p.IsFull));
         }
     }
 }

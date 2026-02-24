@@ -6,6 +6,8 @@ namespace S2O1.Business.Services.Interfaces
         public string WarehouseName { get; set; }
         public string Location { get; set; }
         public int CompanyId { get; set; }
+        public string? CompanyName { get; set; }
+        public bool IsDeleted { get; set; }
     }
 
     public class CreateWarehouseDto
@@ -27,6 +29,7 @@ namespace S2O1.Business.Services.Interfaces
         public string WarehouseName { get; set; }
         public string Name { get; set; }
         public string Description { get; set; }
+        public bool IsDeleted { get; set; }
     }
 
     public class CreateWarehouseShelfDto

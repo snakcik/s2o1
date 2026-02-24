@@ -1,6 +1,8 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using S2O1.DataAccess.Contexts;
+using S2O1.Domain.Common;
+using S2O1.Core.Interfaces;
 using System;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Hosting; // IWebHostEnvironment
@@ -20,8 +22,20 @@ namespace S2O1.API.Controllers
             _env = env;
         }
 
+        [HttpGet("whoami")]
+        public IActionResult WhoAmI([FromServices] S2O1.Core.Interfaces.ICurrentUserService userService)
+        {
+            return Ok(new
+            {
+                userId = userService.UserId,
+                userName = userService.UserName,
+                userRole = userService.UserRole,
+                isRoot = userService.IsRoot
+            });
+        }
+
         [HttpGet("info")]
-        [Filters.Permission("System", "Read")]
+        [Filters.Permission(new[] { "System", "Reports" }, "Read")]
         public async Task<IActionResult> GetSystemInfo()
         {
             bool dbStatus = false;
@@ -106,7 +120,9 @@ namespace S2O1.API.Controllers
         {
             if (userService.UserId != 1) return Forbid();
 
-            var connStr = config.GetConnectionString("DefaultConnection");
+            var isContainer = System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform(System.Runtime.InteropServices.OSPlatform.Linux) || Environment.GetEnvironmentVariable("DOTNET_RUNNING_IN_CONTAINER") == "true";
+            var connStrName = isContainer ? "DockerConnection" : "DefaultConnection";
+            var connStr = config.GetConnectionString(connStrName) ?? config.GetConnectionString("DefaultConnection");
             return Ok(new { connectionString = connStr });
         }
 
@@ -138,12 +154,18 @@ namespace S2O1.API.Controllers
 
                 var newConnStr = builder.ConnectionString;
 
+                var isContainer = System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform(System.Runtime.InteropServices.OSPlatform.Linux) || Environment.GetEnvironmentVariable("DOTNET_RUNNING_IN_CONTAINER") == "true";
+                var connStrName = isContainer ? "DockerConnection" : "DefaultConnection";
+
                 // Update appsettings.json
                 var filePath = System.IO.Path.Combine(_env.ContentRootPath, "appsettings.json");
                 var json = await System.IO.File.ReadAllTextAsync(filePath);
                 var jsonObj = System.Text.Json.Nodes.JsonNode.Parse(json);
                 
-                jsonObj["ConnectionStrings"]["DefaultConnection"] = newConnStr;
+                if (jsonObj["ConnectionStrings"] != null)
+                {
+                    jsonObj["ConnectionStrings"][connStrName] = newConnStr;
+                }
                 
                 await System.IO.File.WriteAllTextAsync(filePath, jsonObj.ToString());
 
@@ -153,6 +175,51 @@ namespace S2O1.API.Controllers
             {
                 return BadRequest(new { message = ex.Message });
             }
+        }
+
+        [HttpPost("restore/{type}/{id}")]
+        public async Task<IActionResult> Restore(string type, int id, [FromServices] S2O1.Core.Interfaces.ICurrentUserService userService)
+        {
+            // Permission check: Only Root or users with "ShowDeletedItems" (Read+Write/Full) can restore
+            if (!userService.IsRoot)
+            {
+                var hasRestorePerm = await _context.UserPermissions
+                    .Include(p => p.Module)
+                    .AnyAsync(p => p.UserId == userService.UserId && 
+                                   p.Module.ModuleName == "ShowDeletedItems" && 
+                                   (p.CanWrite || p.IsFull));
+                
+                if (!hasRestorePerm) return Forbid();
+            }
+
+            BaseEntity entity = type.ToLower() switch
+            {
+                "product" => await _context.Products.IgnoreQueryFilters().FirstOrDefaultAsync(x => x.Id == id),
+                "brand" => await _context.Brands.IgnoreQueryFilters().FirstOrDefaultAsync(x => x.Id == id),
+                "category" => await _context.Categories.IgnoreQueryFilters().FirstOrDefaultAsync(x => x.Id == id),
+                "unit" => await _context.ProductUnits.IgnoreQueryFilters().FirstOrDefaultAsync(x => x.Id == id),
+                "warehouse" => await _context.Warehouses.IgnoreQueryFilters().FirstOrDefaultAsync(x => x.Id == id),
+                "shelf" => await _context.WarehouseShelves.IgnoreQueryFilters().FirstOrDefaultAsync(x => x.Id == id),
+                "supplier" => await _context.Suppliers.IgnoreQueryFilters().FirstOrDefaultAsync(x => x.Id == id),
+                "customercompany" => await _context.CustomerCompanies.IgnoreQueryFilters().FirstOrDefaultAsync(x => x.Id == id),
+                "customer" => await _context.Customers.IgnoreQueryFilters().FirstOrDefaultAsync(x => x.Id == id),
+                "offer" => await _context.Offers.IgnoreQueryFilters().FirstOrDefaultAsync(x => x.Id == id),
+                "invoice" => await _context.Invoices.IgnoreQueryFilters().FirstOrDefaultAsync(x => x.Id == id),
+                "user" => await _context.Users.IgnoreQueryFilters().FirstOrDefaultAsync(x => x.Id == id),
+                "company" => await _context.Companies.IgnoreQueryFilters().FirstOrDefaultAsync(x => x.Id == id),
+                _ => null
+            };
+
+            if (entity == null) return NotFound("Öğe bulunamadı veya bu tür için geri yükleme desteklenmiyor.");
+
+            entity.IsDeleted = false;
+            entity.IsActive = true;
+            entity.UpdatedByUserId = userService.UserId;
+
+            _context.Update(entity);
+            await _context.SaveChangesAsync();
+
+            return Ok(new { message = "Öğe başarıyla geri yüklendi ve aktif edildi." });
         }
 
         public class DbConfigDto
@@ -175,7 +242,8 @@ namespace S2O1.API.Controllers
             return Ok(new 
             { 
                 forceStrongPassword = strongPwd?.SettingValue == "true",
-                barcodeType = barcodeType?.SettingValue ?? "QR"
+                barcodeType = barcodeType?.SettingValue ?? "QR",
+                restartTime = (await _context.SystemSettings.FirstOrDefaultAsync(s => s.SettingKey == "AutoRestartTime"))?.SettingValue ?? "03:00"
             });
         }
 
@@ -208,6 +276,7 @@ namespace S2O1.API.Controllers
 
             await Upsert("ForceStrongPassword", dto.ForceStrongPassword ? "true" : "false");
             await Upsert("BarcodeType", dto.BarcodeType ?? "QR");
+            await Upsert("AutoRestartTime", dto.RestartTime ?? "03:00");
 
             await _context.SaveChangesAsync();
             return Ok(new { message = "Sistem ayarları güncellendi." });
@@ -336,6 +405,24 @@ namespace S2O1.API.Controllers
         {
             public bool ForceStrongPassword { get; set; }
             public string BarcodeType { get; set; }
+            public string RestartTime { get; set; }
         }
+
+        [HttpPost("restart")]
+        public IActionResult RequestRestart([FromServices] Microsoft.Extensions.Hosting.IHostApplicationLifetime lifetime, [FromServices] ICurrentUserService userService)
+        {
+            if (userService.UserId != 1) return Forbid();
+
+            // Simple restart trigger
+            Task.Run(async () => {
+                await Task.Delay(2000); // Give time for response to reach client
+                lifetime.StopApplication();
+            });
+
+            return Ok(new { message = "Uygulama yeniden başlatılıyor..." });
+        }
+
+        [HttpGet("health")]
+        public IActionResult Health() => Ok(new { status = "UP", time = DateTime.Now });
     }
 }

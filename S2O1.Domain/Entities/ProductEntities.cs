@@ -26,14 +26,14 @@ namespace S2O1.Domain.Entities
     public class Brand : BaseEntity
     {
         public string BrandName { get; set; }
-        public string BrandDescription { get; set; }
-        public byte[] BrandLogo { get; set; }
+        public string? BrandDescription { get; set; }
+        public byte[]? BrandLogo { get; set; }
     }
 
     public class Category : BaseEntity
     {
         public string CategoryName { get; set; }
-        public string CategoryDescription { get; set; }
+        public string? CategoryDescription { get; set; }
         public int? ParentCategoryId { get; set; }
         public Category ParentCategory { get; set; }
         public ICollection<Category> SubCategories { get; set; }
@@ -51,7 +51,7 @@ namespace S2O1.Domain.Entities
     {
         public string ProductName { get; set; }
         public string ProductCode { get; set; }
-        public string SystemCode { get; set; }
+        public string? SystemCode { get; set; }
         
         public int CategoryId { get; set; }
         public Category Category { get; set; }
@@ -73,7 +73,7 @@ namespace S2O1.Domain.Entities
         public WarehouseShelf Shelf { get; set; }
         
         public decimal CurrentStock { get; set; } // Managed by StockMovement
-        public string ImageUrl { get; set; }
+        public string? ImageUrl { get; set; }
         
         public byte[] RowVersion { get; set; } // Concurrency Token
 

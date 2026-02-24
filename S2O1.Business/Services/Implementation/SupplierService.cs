@@ -14,16 +14,43 @@ namespace S2O1.Business.Services.Implementation
     {
         private readonly IUnitOfWork _unitOfWork;
         private readonly IMapper _mapper;
+        private readonly ICurrentUserService _currentUserService;
 
-        public SupplierService(IUnitOfWork unitOfWork, IMapper mapper)
+        public SupplierService(IUnitOfWork unitOfWork, IMapper mapper, ICurrentUserService currentUserService)
         {
             _unitOfWork = unitOfWork;
             _mapper = mapper;
+            _currentUserService = currentUserService;
         }
 
-        public async Task<IEnumerable<SupplierDto>> GetAllAsync()
+        private async Task<bool> CanSeeDeletedAsync()
         {
-            var suppliers = await _unitOfWork.Repository<Supplier>().FindAsync(s => !s.IsDeleted);
+            if (_currentUserService.IsRoot) return true;
+            return await _unitOfWork.Repository<UserPermission>().Query()
+                .Include(p => p.Module)
+                .AnyAsync(p => p.UserId == _currentUserService.UserId && 
+                               p.Module.ModuleName == "ShowDeletedItems" && 
+                               (p.CanRead || p.IsFull));
+        }
+
+        public async Task<IEnumerable<SupplierDto>> GetAllAsync(string? status = null)
+        {
+            var canSeeDeleted = await CanSeeDeletedAsync();
+            var query = _unitOfWork.Repository<Supplier>().Query();
+
+            if (canSeeDeleted)
+            {
+                query = query.IgnoreQueryFilters();
+                if (status == "passive") query = query.Where(x => x.IsDeleted);
+                else if (status == "all") query = query.Where(x => true);
+                else query = query.Where(x => !x.IsDeleted);
+            }
+            else
+            {
+                query = query.Where(x => !x.IsDeleted);
+            }
+
+            var suppliers = await query.OrderByDescending(x => x.Id).ToListAsync();
             return _mapper.Map<IEnumerable<SupplierDto>>(suppliers);
         }
 

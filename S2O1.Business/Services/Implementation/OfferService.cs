@@ -17,12 +17,14 @@ namespace S2O1.Business.Services.Implementation
         private readonly IUnitOfWork _unitOfWork;
         private readonly IMapper _mapper;
         private readonly IInvoiceService _invoiceService;
+        private readonly ICurrentUserService _currentUserService;
 
-        public OfferService(IUnitOfWork unitOfWork, IMapper mapper, IInvoiceService invoiceService)
+        public OfferService(IUnitOfWork unitOfWork, IMapper mapper, IInvoiceService invoiceService, ICurrentUserService currentUserService)
         {
             _unitOfWork = unitOfWork;
             _mapper = mapper;
             _invoiceService = invoiceService;
+            _currentUserService = currentUserService;
         }
 
         public async Task ApproveOfferAsync(int offerId, int approverUserId)
@@ -63,18 +65,29 @@ namespace S2O1.Business.Services.Implementation
             
             // Resolve Company IDs
             var user = await _unitOfWork.Repository<User>().GetByIdAsync(userId);
-            if (user == null || !user.CompanyId.HasValue) 
-                throw new Exception("Invoice sender company not found.");
+            if (user == null) throw new Exception("Kullanıcı bulunamadı.");
+
+            int senderCompanyId;
+            if (user.CompanyId.HasValue && user.CompanyId.Value > 0)
+            {
+                senderCompanyId = user.CompanyId.Value;
+            }
+            else
+            {
+                var defaultCompany = await _unitOfWork.Repository<Company>().Query().FirstOrDefaultAsync();
+                if (defaultCompany == null) throw new Exception("Fatura kesebilmek için sisteme en az bir Ana Şirket tanımlanmış olmalıdır.");
+                senderCompanyId = defaultCompany.Id;
+            }
 
             var customer = await _unitOfWork.Repository<Customer>().GetByIdAsync(offer.CustomerId);
             if (customer == null)
-                throw new Exception("Invoice receiver customer not found.");
+                throw new Exception("Fatura kesilecek müşteri bulunamadı.");
 
             var invoiceDto = new CreateInvoiceDto
             {
                 OfferId = offerId,
                 PreparedByUserId = userId,
-                SenderCompanyId = user.CompanyId.Value,
+                SenderCompanyId = senderCompanyId,
                 ReceiverCompanyId = customer.CustomerCompanyId,
                 DueDate = DateTime.Now.AddDays(30),
                 Items = items.Select(i => new InvoiceItemDto 
@@ -88,21 +101,55 @@ namespace S2O1.Business.Services.Implementation
 
             var result = await _invoiceService.CreateAsync(invoiceDto);
             
-            // Should we Auto-Approve invoice? Or leave as Draft?
-            // "Tekliften faturaya dönüştürme" usually creates draft.
-            // User can then approve invoice to deduct stock.
+            // Mark offer as Completed (Faturalandırıldı)
+            offer.Status = OfferStatus.Completed;
+            _unitOfWork.Repository<Offer>().Update(offer);
+            await _unitOfWork.SaveChangesAsync();
             
             return result.Id;
         }
-        public async Task<IEnumerable<S2O1.Business.DTOs.Stock.OfferDto>> GetAllAsync()
+        private async Task<bool> CanSeeDeletedAsync()
         {
-            var offers = await _unitOfWork.Repository<Offer>().Query()
-                .Include(x => x.Items)
-                .ThenInclude(i => i.Product)
-                .Include(x => x.Customer)
-                .ThenInclude(c => c.CustomerCompany)
-                .Where(x => !x.IsDeleted)
-                .ToListAsync();
+            if (_currentUserService.IsRoot) return true;
+            return await _unitOfWork.Repository<UserPermission>().Query()
+                .Include(p => p.Module)
+                .AnyAsync(p => p.UserId == _currentUserService.UserId && 
+                               p.Module.ModuleName == "ShowDeletedItems" && 
+                               (p.CanRead || p.IsFull));
+        }
+
+        public async Task<IEnumerable<S2O1.Business.DTOs.Stock.OfferDto>> GetAllAsync(string? status = null)
+        {
+            var canSeeDeleted = await CanSeeDeletedAsync();
+            var query = _unitOfWork.Repository<Offer>().Query();
+
+            if (canSeeDeleted)
+            {
+                query = query.IgnoreQueryFilters()
+                    .Include(x => x.Items)
+                    .ThenInclude(i => i.Product)
+                    .ThenInclude(p => p.Category)
+                    .Include(x => x.Customer)
+                    .ThenInclude(c => c.CustomerCompany);
+                
+                if (status == "passive")
+                    query = query.Where(x => x.IsDeleted);
+                else if (status == "all")
+                    query = query.Where(x => true);
+                else 
+                    query = query.Where(x => !x.IsDeleted);
+            }
+            else
+            {
+                query = query.Include(x => x.Items)
+                    .ThenInclude(i => i.Product)
+                    .ThenInclude(p => p.Category)
+                    .Include(x => x.Customer)
+                    .ThenInclude(c => c.CustomerCompany)
+                    .Where(x => !x.IsDeleted);
+            }
+
+            var offers = await query.OrderByDescending(x => x.Id).ToListAsync();
             return _mapper.Map<IEnumerable<S2O1.Business.DTOs.Stock.OfferDto>>(offers);
         }
 
@@ -111,6 +158,7 @@ namespace S2O1.Business.Services.Implementation
             var offer = await _unitOfWork.Repository<Offer>().Query()
                 .Include(x => x.Items)
                 .ThenInclude(i => i.Product)
+                .ThenInclude(p => p.Category)
                 .Include(x => x.Customer)
                 .ThenInclude(c => c.CustomerCompany)
                 .FirstOrDefaultAsync(x => x.Id == id && !x.IsDeleted);
@@ -188,10 +236,23 @@ namespace S2O1.Business.Services.Implementation
 
         public async Task<bool> DeleteAsync(int id)
         {
-            var offer = await _unitOfWork.Repository<Offer>().GetByIdAsync(id);
+            var offer = await _unitOfWork.Repository<Offer>().Query()
+                .Include(x => x.Items)
+                .FirstOrDefaultAsync(x => x.Id == id);
+                
             if (offer == null) return false;
 
             offer.IsDeleted = true;
+            
+            // Also mark items as deleted
+            if (offer.Items != null)
+            {
+                foreach (var item in offer.Items)
+                {
+                    item.IsDeleted = true;
+                }
+            }
+
             _unitOfWork.Repository<Offer>().Update(offer);
             await _unitOfWork.SaveChangesAsync();
             return true;

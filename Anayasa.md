@@ -984,5 +984,5 @@ depocu işi üzerine aldığı zaman;
 Satışı yapılan ürünlerin kodu, hangi depoda, hangi rafta olduğu liste olarak depocuda gözüksün.
 Depocu için bir sepet oluşturulsun ve depocu ürünler için oluşan barkod/qr kod veya ürünleri elle seçerek ürünleri sepete eklesin sepet tamamlandıktan sonra  depodan çıkış işlemini onaylasın. onay ekranı sonrası teslim eden. ilgili depocu teslim alan Textbox ta isim soy isim alınacak ve sepete eklenen ürünler için irsaliye oluşacak irsaliyede satışın yapıldığı şirket bilgileri ürün markası kodu ve hangi üründen kaç birim olduğu yazacak. ürünler için irsaliyeye ekle/ekleme seçeneği olsun ürün ekleme sayfasında bu seçenek çıksın çünkü işçilik gibi soyut kavramlar depoda olmayacağı için irsaliyeye eklenmeyecek.
 
-
+Giden irsaliyeler ekranında irsaliyelerin yanında PDF butonu olsun ve butona bastığımızda dosyanın pdf ini o anda oluştursun ve indirsin, teklif yönetimi altında faturalanmış teklifler için hala faturalarştır butonu gözüküyor teklifler ekranında filtre olsun teklifin 3 durumu içinde ayrı onaysız/onaylı/faturalandırmış şeklinde. Faturalandırılmış teklifler için düzenle ve sil faturalaştır butonu çıkmasın. faturalandırılmış teklifler için fatura sayfasında onaylanmamış faıra için reddet butonu olsun ve reddeilen fatura teklif ekranına onaysız olarak geri düşsün
 

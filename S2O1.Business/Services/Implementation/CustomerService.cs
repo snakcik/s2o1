@@ -14,27 +14,52 @@ namespace S2O1.Business.Services.Implementation
     {
         private readonly IUnitOfWork _unitOfWork;
         private readonly IMapper _mapper;
+        private readonly ICurrentUserService _currentUserService;
 
-        public CustomerService(IUnitOfWork unitOfWork, IMapper mapper)
+        public CustomerService(IUnitOfWork unitOfWork, IMapper mapper, ICurrentUserService currentUserService)
         {
             _unitOfWork = unitOfWork;
             _mapper = mapper;
+            _currentUserService = currentUserService;
+        }
+
+        private async Task<bool> CanSeeDeletedAsync()
+        {
+            if (_currentUserService.IsRoot) return true;
+            return await _unitOfWork.Repository<UserPermission>().Query()
+                .Include(p => p.Module)
+                .AnyAsync(p => p.UserId == _currentUserService.UserId && 
+                               p.Module.ModuleName == "ShowDeletedItems" && 
+                               (p.CanRead || p.IsFull));
         }
 
         // --- Customer Company Methods ---
 
-        public async Task<IEnumerable<CustomerCompanyDto>> GetAllCompaniesAsync()
+        public async Task<IEnumerable<CustomerCompanyDto>> GetAllCompaniesAsync(string? status = null)
         {
-            var data = await _unitOfWork.Repository<CustomerCompany>().Query()
-                .Where(x => !x.IsDeleted)
-                .ToListAsync();
+            var query = _unitOfWork.Repository<CustomerCompany>().Query();
+            if (await CanSeeDeletedAsync())
+            {
+                query = query.IgnoreQueryFilters();
+                if (status == "passive") query = query.Where(x => x.IsDeleted);
+                else if (status == "all") query = query.Where(x => true);
+                else query = query.Where(x => !x.IsDeleted);
+            }
+            else
+            {
+                query = query.Where(x => !x.IsDeleted);
+            }
+
+            var data = await query.OrderByDescending(x => x.Id).ToListAsync();
             return _mapper.Map<IEnumerable<CustomerCompanyDto>>(data);
         }
 
         public async Task<CustomerCompanyDto> GetCompanyByIdAsync(int id)
         {
-            var entity = await _unitOfWork.Repository<CustomerCompany>().GetByIdAsync(id);
-            if (entity == null || entity.IsDeleted) return null;
+            var entity = await _unitOfWork.Repository<CustomerCompany>().Query()
+                .IgnoreQueryFilters()
+                .FirstOrDefaultAsync(x => x.Id == id);
+            if (entity == null) return null;
             return _mapper.Map<CustomerCompanyDto>(entity);
         }
 
@@ -51,8 +76,10 @@ namespace S2O1.Business.Services.Implementation
 
         public async Task<CustomerCompanyDto> UpdateCompanyAsync(UpdateCustomerCompanyDto dto)
         {
-            var entity = await _unitOfWork.Repository<CustomerCompany>().GetByIdAsync(dto.Id);
-            if (entity == null || entity.IsDeleted) return null;
+            var entity = await _unitOfWork.Repository<CustomerCompany>().Query()
+                .IgnoreQueryFilters()
+                .FirstOrDefaultAsync(x => x.Id == dto.Id);
+            if (entity == null) return null;
 
             _mapper.Map(dto, entity);
             _unitOfWork.Repository<CustomerCompany>().Update(entity);
@@ -62,8 +89,8 @@ namespace S2O1.Business.Services.Implementation
 
         public async Task<bool> DeleteCompanyAsync(int id)
         {
-            var entity = await _unitOfWork.Repository<CustomerCompany>().GetByIdAsync(id);
-            if (entity == null || entity.IsDeleted) return false;
+            var entity = await _unitOfWork.Repository<CustomerCompany>().Query().IgnoreQueryFilters().FirstOrDefaultAsync(x => x.Id == id);
+            if (entity == null) return false;
 
             entity.IsDeleted = true;
             _unitOfWork.Repository<CustomerCompany>().Update(entity);
@@ -73,12 +100,23 @@ namespace S2O1.Business.Services.Implementation
 
         // --- Customer Methods ---
 
-        public async Task<IEnumerable<CustomerDto>> GetAllCustomersAsync()
+        public async Task<IEnumerable<CustomerDto>> GetAllCustomersAsync(string? status = null)
         {
-            var data = await _unitOfWork.Repository<Customer>().Query()
-                .Include(x => x.CustomerCompany)
-                .Where(x => !x.IsDeleted)
-                .ToListAsync();
+            var canSeeDeleted = await CanSeeDeletedAsync();
+            var query = _unitOfWork.Repository<Customer>().Query();
+
+            if (canSeeDeleted)
+            {
+                query = query.IgnoreQueryFilters().Include(x => x.CustomerCompany);
+                if (status == "passive") query = query.Where(x => x.IsDeleted);
+                else if (status == "all") query = query.Where(x => true);
+                else query = query.Where(x => !x.IsDeleted);
+            }
+            else
+            {
+                query = query.Include(x => x.CustomerCompany).Where(x => !x.IsDeleted);
+            }
+            var data = await query.OrderByDescending(x => x.Id).ToListAsync();
             return _mapper.Map<IEnumerable<CustomerDto>>(data);
         }
 

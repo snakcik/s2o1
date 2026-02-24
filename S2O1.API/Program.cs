@@ -14,10 +14,21 @@ var builder = WebApplication.CreateBuilder(args);
 // 1. Data Access Layer
 // Read connection string from appsettings.json
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
+
+if (System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform(System.Runtime.InteropServices.OSPlatform.Linux) || 
+    Environment.GetEnvironmentVariable("DOTNET_RUNNING_IN_CONTAINER") == "true")
+{
+    var dockerConn = builder.Configuration.GetConnectionString("DockerConnection");
+    if (!string.IsNullOrEmpty(dockerConn))
+    {
+        connectionString = dockerConn;
+    }
+}
+
 if (string.IsNullOrEmpty(connectionString))
 {
     // Fallback or throw
-    connectionString = "Server=localhost;Database=2S1O;User Id=sa;Password=Q1w2e3r4;TrustServerCertificate=True;";
+    connectionString = "Server=localhost;Database=2S1O;User Id=sa;Password=Q1w2e3r4!;Encrypt=True;TrustServerCertificate=True;";
 }
 builder.Services.AddDataAccess(connectionString);
 
@@ -46,13 +57,35 @@ builder.Services.AddCors(options =>
 // 5. Current User Service (Placeholder for API - typically reads from Claims)
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<ICurrentUserService, ApiCurrentUserService>();
+builder.Services.AddHostedService<S2O1.API.Services.SystemRestartService>();
+builder.Services.AddHostedService<S2O1.API.Services.QueueProcessorService>();
 
 var app = builder.Build();
+
 // Configure the HTTP request pipeline.
-if (app.Environment.IsDevelopment())
+bool isDevelopment = app.Environment.IsDevelopment();
+
+// Check database for DeploymentEnvironment setting if we can connect
+using (var scope = app.Services.CreateScope())
+{
+    try
+    {
+        var context = scope.ServiceProvider.GetRequiredService<S2O1.DataAccess.Contexts.S2O1DbContext>();
+        if (context.Database.CanConnect())
+        {
+            var envSetting = context.SystemSettings.FirstOrDefault(s => s.SettingKey == "DeploymentEnvironment");
+            if (envSetting != null && envSetting.SettingValue == "Development")
+            {
+                isDevelopment = true;
+            }
+        }
+    }
+    catch { } // Ignore DB errors at this stage
+}
+
+if (isDevelopment)
 {
     app.UseSwagger();
-
     app.UseSwaggerUI();
 }
 
@@ -110,13 +143,9 @@ using (var scope = app.Services.CreateScope())
     try
     {
         var context = services.GetRequiredService<S2O1.DataAccess.Contexts.S2O1DbContext>();
-        // context.Database.EnsureDeleted(); // Uncomment if needed to reset
-        // context.Database.EnsureDeleted(); // Uncomment if needed to reset
-        // Ensure Created using Migrations
-        if (context.Database.GetPendingMigrations().Any())
-        {
-             context.Database.Migrate();
-        }
+        
+        // Bu kod şemayı otomatik günceller, verilere zarar vermez (eğer sadece yeni sütun/tablo eklendiyse)
+        context.Database.Migrate();
         
         await S2O1.DataAccess.Persistence.DbInitializer.InitializeAsync(context, services);
     }

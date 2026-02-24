@@ -98,6 +98,26 @@ namespace S2O1.CLI
             // Start Monitor
             ConsoleHelper.StartInactivityMonitor();
             
+            // Check Database Connection Before Login
+            try
+            {
+                var dbContext = provider.GetRequiredService<S2O1.DataAccess.Contexts.S2O1DbContext>();
+                if (!await dbContext.Database.CanConnectAsync())
+                {
+                    ConsoleHelper.PrintWarning("Could not connect to database (or it doesn't exist). Launching Setup Wizard...");
+                    var setup = new S2O1.CLI.Flows.SetupWizard();
+                    await setup.RunAsync();
+                    return;
+                }
+            }
+            catch (Exception)
+            {
+                ConsoleHelper.PrintWarning("Could not connect to database. Launching Setup Wizard...");
+                var setup = new S2O1.CLI.Flows.SetupWizard();
+                await setup.RunAsync();
+                return;
+            }
+
             // Login
             Console.Write("Username: ");
             string username = ConsoleHelper.ReadLine();

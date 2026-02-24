@@ -99,11 +99,17 @@ namespace S2O1.Business.Services.Implementation
                 }
 
                 await _unitOfWork.SaveChangesAsync();
-                await transaction.CommitAsync();
+                if (transaction != null)
+                {
+                    await transaction.CommitAsync();
+                }
             }
             catch (Exception)
             {
-                await transaction.RollbackAsync();
+                if (transaction != null)
+                {
+                    await transaction.RollbackAsync();
+                }
                 throw;
             }
         }
@@ -230,6 +236,7 @@ namespace S2O1.Business.Services.Implementation
             var query = _unitOfWork.Repository<Product>().Query()
                 .Include(p => p.Warehouse)
                 .Include(p => p.Unit)
+                .Where(p => p.IsActive && !p.IsDeleted) // Only active products
                 .AsNoTracking();
 
             if (warehouseId.HasValue)
@@ -239,27 +246,88 @@ namespace S2O1.Business.Services.Implementation
             }
 
             var products = await query.ToListAsync();
+            var productIds = products.Select(p => p.Id).ToList();
 
-            return products.Select(p => new WarehouseStockReportDto
+            // FIXED: Added IsDeleted and IsActive checks to ensure deleted invoices don't reserve stock.
+            var invoiceItemsQuery = await _unitOfWork.Repository<InvoiceItem>().Query()
+                .Include(ii => ii.Invoice)
+                .Where(ii => productIds.Contains(ii.ProductId) && 
+                             !ii.IsDeleted && ii.IsActive &&              // Item must be active
+                             !ii.Invoice.IsDeleted && ii.Invoice.IsActive && // Invoice must be active
+                             (ii.Invoice.Status == InvoiceStatus.Approved || 
+                              ii.Invoice.Status == InvoiceStatus.WaitingForWarehouse || 
+                              ii.Invoice.Status == InvoiceStatus.InPreparation))
+                .AsNoTracking()
+                .ToListAsync();
+
+            // FIXED: Also include Approved Offers that haven't been invoiced yet.
+            var offerItemsQuery = await _unitOfWork.Repository<OfferItem>().Query()
+                .Include(oi => oi.Offer)
+                .Where(oi => productIds.Contains(oi.ProductId) &&
+                             !oi.IsDeleted && oi.IsActive &&
+                             !oi.Offer.IsDeleted && oi.Offer.IsActive &&
+                             oi.Offer.Status == OfferStatus.Approved) // Only Approved ones reserve stock
+                .AsNoTracking()
+                .ToListAsync();
+
+            var reservedByProductId = invoiceItemsQuery
+                .Where(ii => ii.Invoice.Status == InvoiceStatus.Approved || ii.Invoice.Status == InvoiceStatus.WaitingForWarehouse)
+                .GroupBy(ii => ii.ProductId)
+                .ToDictionary(g => g.Key, g => g.Sum(ii => ii.Quantity));
+
+            // Add OfferItem reservations to the dictionary
+            foreach(var group in offerItemsQuery.GroupBy(oi => oi.ProductId))
             {
-                WarehouseName = p.Warehouse?.WarehouseName ?? "Depo Belirtilmemiş",
-                ProductCode = p.ProductCode,
-                ProductName = p.ProductName,
-                CurrentStock = p.CurrentStock,
-                UnitName = p.Unit?.UnitName ?? "Birim Belirtilmemiş"
+                if (reservedByProductId.ContainsKey(group.Key))
+                    reservedByProductId[group.Key] += group.Sum(oi => oi.Quantity);
+                else
+                    reservedByProductId[group.Key] = group.Sum(oi => oi.Quantity);
+            }
+
+            var waitingByProductId = invoiceItemsQuery
+                .Where(ii => ii.Invoice.Status == InvoiceStatus.InPreparation)
+                .GroupBy(ii => ii.ProductId)
+                .ToDictionary(g => g.Key, g => g.Sum(ii => ii.Quantity));
+
+            return products.Select(p => 
+            {
+                decimal reserved = reservedByProductId.ContainsKey(p.Id) ? reservedByProductId[p.Id] : 0;
+                decimal waiting = waitingByProductId.ContainsKey(p.Id) ? waitingByProductId[p.Id] : 0;
+                
+                return new WarehouseStockReportDto
+                {
+                    WarehouseName = p.Warehouse?.WarehouseName ?? "Depo Belirtilmemiş",
+                    ProductCode = p.ProductCode,
+                    ProductName = p.ProductName,
+                    CurrentStock = p.CurrentStock,
+                    ReservedStock = reserved,
+                    WaitingInWarehouseStock = waiting,
+                    AvailableStock = p.CurrentStock - reserved - waiting,
+                    UnitName = p.Unit?.UnitName ?? "Birim Belirtilmemiş"
+                };
             });
         }
 
         public async Task<IEnumerable<WaybillDto>> GetWaybillsBySupplierAsync(int supplierId)
         {
-            return await SearchWaybillsAsync(null, null, null, supplierId);
+            return await SearchWaybillsAsync(null, null, null, supplierId, null);
         }
 
-        public async Task<IEnumerable<WaybillDto>> SearchWaybillsAsync(string? waybillNo, DateTime? startDate, DateTime? endDate, int? supplierId)
+        public async Task<IEnumerable<WaybillDto>> SearchWaybillsAsync(string? waybillNo, DateTime? startDate, DateTime? endDate, int? supplierId, string? type)
         {
             var query = _unitOfWork.Repository<StockMovement>().Query()
                 .Include(m => m.Supplier)
-                .Where(m => m.MovementType == MovementType.Entry);
+                .Include(m => m.Customer)
+                .AsQueryable();
+
+            if (type == "Giden")
+            {
+                query = query.Where(m => m.MovementType == MovementType.Exit);
+            }
+            else // Default to Gelen if not specified or specified as Gelen
+            {
+                query = query.Where(m => m.MovementType == MovementType.Entry);
+            }
 
             if (!string.IsNullOrEmpty(waybillNo))
             {
@@ -279,7 +347,14 @@ namespace S2O1.Business.Services.Implementation
 
             if (supplierId.HasValue && supplierId > 0)
             {
-                query = query.Where(m => m.SupplierId == supplierId.Value);
+                if (type == "Giden")
+                {
+                    query = query.Where(m => m.CustomerId == supplierId.Value);
+                }
+                else
+                {
+                    query = query.Where(m => m.SupplierId == supplierId.Value);
+                }
             }
 
             var movements = await query.OrderByDescending(m => m.MovementDate).ToListAsync();
@@ -290,11 +365,32 @@ namespace S2O1.Business.Services.Implementation
                 {
                     WaybillNo = g.Key ?? "Dökümansız",
                     Date = g.Max(m => m.MovementDate),
-                    SupplierName = g.First().Supplier?.SupplierCompanyName ?? "Bilinmiyor",
+                    SupplierName = g.First().MovementType == MovementType.Exit ? 
+                        (g.First().Customer?.CustomerContactPersonName ?? "Bilinmiyor") : 
+                        (g.First().Supplier?.SupplierCompanyName ?? "Bilinmiyor"),
                     Description = g.First().Description,
                     DocumentPath = g.First().DocumentPath,
                     TotalQuantity = g.Sum(m => m.Quantity)
                 });
+        }
+
+        public async Task<IEnumerable<WaybillItemDto>> GetWaybillItemsAsync(string waybillNo)
+        {
+            // Handle "Dökümansız" as null search
+            bool isNullSearch = waybillNo == "Dökümansız" || string.IsNullOrEmpty(waybillNo);
+
+            var query = _unitOfWork.Repository<StockMovement>().Query()
+                .Where(m => isNullSearch ? m.DocumentNo == null : m.DocumentNo == waybillNo);
+
+            return await query.Select(m => new WaybillItemDto
+            {
+                ProductId = m.ProductId,
+                ProductCode = m.Product != null ? m.Product.ProductCode : "-",
+                ProductName = m.Product != null ? m.Product.ProductName : "Bilinmeyen Ürün",
+                Quantity = m.Quantity,
+                UnitName = (m.Product != null && m.Product.Unit != null) ? m.Product.Unit.UnitName : "-",
+                Description = m.Description
+            }).ToListAsync();
         }
     }
 }

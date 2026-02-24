@@ -13,16 +13,47 @@ namespace S2O1.Business.Services.Implementation
     {
         private readonly IUnitOfWork _unitOfWork;
         private readonly IMapper _mapper;
+        private readonly ICurrentUserService _currentUserService;
 
-        public WarehouseService(IUnitOfWork unitOfWork, IMapper mapper)
+        public WarehouseService(IUnitOfWork unitOfWork, IMapper mapper, ICurrentUserService currentUserService)
         {
             _unitOfWork = unitOfWork;
             _mapper = mapper;
+            _currentUserService = currentUserService;
         }
 
-        public async Task<IEnumerable<WarehouseDto>> GetAllAsync()
+        private async Task<bool> CanSeeDeletedAsync()
         {
-            var warehouses = await _unitOfWork.Repository<Warehouse>().FindAsync(w => !w.IsDeleted);
+            if (_currentUserService.IsRoot) return true;
+            return await _unitOfWork.Repository<UserPermission>().Query()
+                .Include(p => p.Module)
+                .AnyAsync(p => p.UserId == _currentUserService.UserId && 
+                               p.Module.ModuleName == "ShowDeletedItems" && 
+                               (p.CanRead || p.IsFull));
+        }
+
+        public async Task<IEnumerable<WarehouseDto>> GetAllAsync(string? status = null, string? searchTerm = null)
+        {
+            var query = _unitOfWork.Repository<Warehouse>().Query();
+            if (await CanSeeDeletedAsync())
+            {
+                query = query.IgnoreQueryFilters();
+                if (status == "passive") query = query.Where(x => x.IsDeleted);
+                else if (status == "all") query = query.Where(x => true);
+                else query = query.Where(x => !x.IsDeleted);
+            }
+            else
+            {
+                query = query.Where(x => !x.IsDeleted);
+            }
+
+            if (!string.IsNullOrWhiteSpace(searchTerm))
+            {
+                var search = searchTerm.ToLower();
+                query = query.Where(x => x.WarehouseName.ToLower().Contains(search));
+            }
+
+            var warehouses = await query.Include(x => x.Company).OrderByDescending(x => x.Id).ToListAsync();
             var dtos = new List<WarehouseDto>();
             foreach (var w in warehouses)
             {
@@ -31,7 +62,9 @@ namespace S2O1.Business.Services.Implementation
                     Id = w.Id, 
                     WarehouseName = w.WarehouseName, 
                     Location = w.Location, 
-                    CompanyId = w.CompanyId 
+                    CompanyId = w.CompanyId,
+                    CompanyName = w.Company?.CompanyName,
+                    IsDeleted = w.IsDeleted
                 });
             }
             return dtos;
@@ -103,12 +136,23 @@ namespace S2O1.Business.Services.Implementation
             return true;
         }
 
-        public async Task<IEnumerable<WarehouseShelfDto>> GetAllShelvesAsync()
+        public async Task<IEnumerable<WarehouseShelfDto>> GetAllShelvesAsync(string? status = null)
         {
-            var shelves = await _unitOfWork.Repository<WarehouseShelf>().Query()
-                .Include(s => s.Warehouse)
-                .Where(s => !s.IsDeleted)
-                .ToListAsync();
+            IQueryable<WarehouseShelf> query = _unitOfWork.Repository<WarehouseShelf>().Query();
+
+            if (await CanSeeDeletedAsync())
+            {
+                query = query.IgnoreQueryFilters();
+                if (status == "passive") query = query.Where(x => x.IsDeleted);
+                else if (status == "all") query = query.Where(x => true);
+                else query = query.Where(x => !x.IsDeleted);
+            }
+            else
+            {
+                query = query.Where(x => !x.IsDeleted);
+            }
+
+            var shelves = await query.Include(s => s.Warehouse).OrderByDescending(x => x.Id).ToListAsync();
             return _mapper.Map<IEnumerable<WarehouseShelfDto>>(shelves);
         }
 
@@ -117,6 +161,7 @@ namespace S2O1.Business.Services.Implementation
             var shelves = await _unitOfWork.Repository<WarehouseShelf>().Query()
                 .Include(s => s.Warehouse)
                 .Where(s => s.WarehouseId == warehouseId && !s.IsDeleted)
+                .OrderByDescending(x => x.Id)
                 .ToListAsync();
             return _mapper.Map<IEnumerable<WarehouseShelfDto>>(shelves);
         }

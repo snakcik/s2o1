@@ -18,17 +18,42 @@ namespace S2O1.Business.Services.Implementation
         private readonly IUnitOfWork _unitOfWork;
         private readonly IMapper _mapper;
         private readonly IStockService _stockService;
+        private readonly ICurrentUserService _currentUserService;
 
-        public InvoiceService(IUnitOfWork unitOfWork, IMapper mapper, IStockService stockService)
+        public InvoiceService(IUnitOfWork unitOfWork, IMapper mapper, IStockService stockService, ICurrentUserService currentUserService)
         {
             _unitOfWork = unitOfWork;
             _mapper = mapper;
             _stockService = stockService;
+            _currentUserService = currentUserService;
         }
 
         public async Task<InvoiceDto> GetByIdAsync(int id)
         {
-            var invoice = await _unitOfWork.Repository<Invoice>().GetByIdAsync(id);
+            var invoice = await _unitOfWork.Repository<Invoice>().Query()
+                .Include(i => i.AssignedDelivererUser)
+                .Include(i => i.Items).ThenInclude(it => it.Product).ThenInclude(p => p.Warehouse)
+                .Include(i => i.Items).ThenInclude(it => it.Product).ThenInclude(p => p.Shelf)
+                .Include(i => i.SellerCompany)
+                .Include(i => i.BuyerCompany)
+                .Include(i => i.Offer).ThenInclude(o => o.Customer).ThenInclude(c => c.CustomerCompany)
+                .FirstOrDefaultAsync(i => i.Id == id);
+                
+            if (invoice == null) return null;
+            return _mapper.Map<InvoiceDto>(invoice);
+        }
+
+        public async Task<InvoiceDto> GetByNumberAsync(string invoiceNumber)
+        {
+            var invoice = await _unitOfWork.Repository<Invoice>().Query()
+                .Include(i => i.AssignedDelivererUser)
+                .Include(i => i.Items).ThenInclude(it => it.Product).ThenInclude(p => p.Warehouse)
+                .Include(i => i.Items).ThenInclude(it => it.Product).ThenInclude(p => p.Shelf)
+                .Include(i => i.SellerCompany)
+                .Include(i => i.BuyerCompany)
+                .Include(i => i.Offer).ThenInclude(o => o.Customer).ThenInclude(c => c.CustomerCompany)
+                .FirstOrDefaultAsync(i => i.InvoiceNumber == invoiceNumber);
+                
             if (invoice == null) return null;
             return _mapper.Map<InvoiceDto>(invoice);
         }
@@ -142,12 +167,80 @@ namespace S2O1.Business.Services.Implementation
                  throw;
              }
         }
-        public async Task<System.Collections.Generic.IEnumerable<InvoiceDto>> GetAllAsync()
+        public async Task<bool> RejectInvoiceAsync(int invoiceId)
         {
-            var invoices = await _unitOfWork.Repository<Invoice>().Query()
-                .Include(i => i.AssignedDelivererUser)
-                .Include(i => i.Items).ThenInclude(it => it.Product)
-                .ToListAsync();
+             using var transaction = await _unitOfWork.BeginTransactionAsync();
+             try
+             {
+                 var invoice = await _unitOfWork.Repository<Invoice>().GetByIdAsync(invoiceId);
+                 if (invoice == null) throw new Exception("Invoice not found");
+                 
+                 invoice.Status = InvoiceStatus.Cancelled;
+                 _unitOfWork.Repository<Invoice>().Update(invoice);
+
+                 if (invoice.OfferId.HasValue)
+                 {
+                     var offer = await _unitOfWork.Repository<Offer>().GetByIdAsync(invoice.OfferId.Value);
+                     if (offer != null)
+                     {
+                         offer.Status = OfferStatus.Pending; // Change back to Pending (Onaysız)
+                         _unitOfWork.Repository<Offer>().Update(offer);
+                     }
+                 }
+                 
+                 await _unitOfWork.SaveChangesAsync();
+                 await transaction.CommitAsync();
+                 return true;
+             }
+             catch
+             {
+                 await transaction.RollbackAsync();
+                 throw;
+             }
+        }
+
+        private async Task<bool> CanSeeDeletedAsync()
+        {
+            if (_currentUserService.IsRoot) return true;
+            return await _unitOfWork.Repository<UserPermission>().Query()
+                .Include(p => p.Module)
+                .AnyAsync(p => p.UserId == _currentUserService.UserId && 
+                               p.Module.ModuleName == "ShowDeletedItems" && 
+                               (p.CanRead || p.IsFull));
+        }
+
+        public async Task<System.Collections.Generic.IEnumerable<InvoiceDto>> GetAllAsync(string? status = null)
+        {
+            var canSeeDeleted = await CanSeeDeletedAsync();
+            var query = _unitOfWork.Repository<Invoice>().Query();
+
+            if (canSeeDeleted)
+            {
+                query = query.IgnoreQueryFilters()
+                    .Include(i => i.AssignedDelivererUser)
+                    .Include(i => i.Items).ThenInclude(it => it.Product)
+                    .Include(i => i.SellerCompany)
+                    .Include(i => i.BuyerCompany)
+                    .Include(i => i.Offer).ThenInclude(o => o.Customer).ThenInclude(c => c.CustomerCompany);
+                
+                if (status == "passive")
+                    query = query.Where(x => x.IsDeleted);
+                else if (status == "all")
+                    query = query.Where(x => true);
+                else
+                    query = query.Where(x => !x.IsDeleted);
+            }
+            else
+            {
+                query = query.Include(i => i.AssignedDelivererUser)
+                    .Include(i => i.Items).ThenInclude(it => it.Product)
+                    .Include(i => i.SellerCompany)
+                    .Include(i => i.BuyerCompany)
+                    .Include(i => i.Offer).ThenInclude(o => o.Customer).ThenInclude(c => c.CustomerCompany)
+                    .Where(x => !x.IsDeleted);
+            }
+
+            var invoices = await query.OrderByDescending(x => x.Id).ToListAsync();
             return _mapper.Map<System.Collections.Generic.IEnumerable<InvoiceDto>>(invoices);
         }
 
@@ -156,7 +249,11 @@ namespace S2O1.Business.Services.Implementation
             var invoices = await _unitOfWork.Repository<Invoice>().Query()
                 .Include(i => i.Items).ThenInclude(it => it.Product).ThenInclude(p => p.Warehouse)
                 .Include(i => i.Items).ThenInclude(it => it.Product).ThenInclude(p => p.Shelf)
+                .Include(i => i.SellerCompany)
+                .Include(i => i.BuyerCompany)
+                .Include(i => i.Offer).ThenInclude(o => o.Customer).ThenInclude(c => c.CustomerCompany)
                 .Where(i => i.Status == InvoiceStatus.WaitingForWarehouse || i.Status == InvoiceStatus.InPreparation)
+                .OrderByDescending(x => x.Id)
                 .ToListAsync();
             
             return _mapper.Map<System.Collections.Generic.IEnumerable<InvoiceDto>>(invoices);
@@ -216,14 +313,20 @@ namespace S2O1.Business.Services.Implementation
 
                     if (item.Product != null && item.Product.IsPhysical)
                     {
+                        if (!item.Product.WarehouseId.HasValue || item.Product.WarehouseId.Value == 0)
+                        {
+                            throw new Exception($"'{item.Product.ProductName}' ürünü için depoda herhangi bir konum belirlenmemiş (Depo bilgisi yok). Stok hareketini tamamlamak için lütfen ürün sayfasından ürüne bir depo ataması yapın.");
+                        }
+
                         // 1. Stock Movement EXIT
                         var moveDto = new StockMovementDto
                         {
                             ProductId = item.ProductId,
-                            WarehouseId = item.Product.WarehouseId.GetValueOrDefault(),
+                            WarehouseId = item.Product.WarehouseId.Value,
                             MovementType = MovementType.Exit,
                             Quantity = item.Quantity,
                             UserId = dto.DelivererUserId,
+                            CustomerId = invoice.BuyerCompanyId,
                             DocumentNo = invoice.InvoiceNumber,
                             Description = $"Warehouse Delivery Completed",
                         };

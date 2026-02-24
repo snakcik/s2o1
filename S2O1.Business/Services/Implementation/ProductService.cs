@@ -7,6 +7,7 @@ using System.Linq;
 using System.Collections.Generic;
 using Microsoft.EntityFrameworkCore;
 using S2O1.Domain.Enums;
+using S2O1.Business.DTOs.Stock;
 
 namespace S2O1.Business.Services.Implementation
 {
@@ -44,6 +45,16 @@ namespace S2O1.Business.Services.Implementation
 
         public async Task<ProductDto> CreateAsync(CreateProductDto dto)
         {
+            // 1. Validate uniqueness BEFORE touching DB
+            var duplicate = await _unitOfWork.Repository<Product>().Query()
+                .IgnoreQueryFilters()
+                .AnyAsync(p => p.ProductCode == dto.ProductCode && p.WarehouseId == dto.WarehouseId);
+            if (duplicate)
+            {
+                throw new System.InvalidOperationException(
+                    $"Bu depoda '{dto.ProductCode}' ürün koduyla zaten bir ürün mevcut.");
+            }
+
             var product = new Product
             {
                 ProductName = dto.ProductName,
@@ -52,7 +63,7 @@ namespace S2O1.Business.Services.Implementation
                 BrandId = dto.BrandId,
                 UnitId = dto.UnitId,
                 WarehouseId = dto.WarehouseId,
-                CurrentStock = dto.InitialStock, // Initial stock from user input
+                CurrentStock = dto.InitialStock,
                 ImageUrl = dto.ImageUrl,
                 IsPhysical = dto.IsPhysical,
                 ShelfId = dto.ShelfId,
@@ -60,31 +71,30 @@ namespace S2O1.Business.Services.Implementation
                 CreateDate = System.DateTime.Now
             };
 
-            await _unitOfWork.Repository<Product>().AddAsync(product);
-            await _unitOfWork.SaveChangesAsync();
-
-            // Generate unique product code if warehouse/shelf is provided
+            // 2. Generate unique system code BEFORE first save (so it is included in the same commit)
             if (product.WarehouseId.HasValue && product.ShelfId.HasValue)
             {
                 await GenerateUniqueProductCode(product);
-                _unitOfWork.Repository<Product>().Update(product);
-                await _unitOfWork.SaveChangesAsync();
             }
 
-            // If Initial Stock > 0, Create a Stock Movement Record
+            await _unitOfWork.Repository<Product>().AddAsync(product);
+
+            // 3. Queue stock movement in same unit-of-work (no extra SaveChanges needed)
+            StockMovement movement = null;
             if (dto.InitialStock > 0)
             {
                 var userId = _currentUserService.UserId ?? 0;
-                if (userId == 0) throw new System.Exception("User ID is missing. Cannot Create Stock Movement.");
+                if (userId == 0)
+                    throw new System.Exception("Kullanıcı kimliği bulunamadı. Stok hareketi oluşturulamadı.");
 
-                var movement = new StockMovement
+                movement = new StockMovement
                 {
-                    ProductId = product.Id,
+                    Product = product, // EF will link via FK after insert
                     Quantity = dto.InitialStock,
                     MovementType = S2O1.Domain.Enums.MovementType.Entry,
                     MovementDate = System.DateTime.Now,
-                    Description = "Initial Stock Entry",
-                    WarehouseId = dto.WarehouseId.GetValueOrDefault(),
+                    Description = "İlk Stok Girişi",
+                    WarehouseId = dto.WarehouseId ?? 0,
                     CreateDate = System.DateTime.Now,
                     IsActive = true,
                     IsDeleted = false,
@@ -92,28 +102,72 @@ namespace S2O1.Business.Services.Implementation
                     DocumentNo = "-"
                 };
                 await _unitOfWork.Repository<StockMovement>().AddAsync(movement);
-                await _unitOfWork.SaveChangesAsync();
             }
 
-            return new ProductDto
-            {
-                Id = product.Id,
-                ProductName = product.ProductName,
-                ProductCode = product.ProductCode,
-                SystemCode = product.SystemCode,
-                WarehouseId = product.WarehouseId,
-                CurrentStock = product.CurrentStock,
-                ImageUrl = product.ImageUrl
-            };
-        }
-        
-        public async Task<System.Collections.Generic.IEnumerable<ProductDto>> GetAllAsync()
-        {
-            var products = await _unitOfWork.Repository<Product>().Query()
+            // 4. Single atomic commit — product + movement saved together
+            await _unitOfWork.SaveChangesAsync();
+
+            // 5. Reload with navigation properties for the DTO
+            product = await _unitOfWork.Repository<Product>().Query()
                 .Include(p => p.Unit)
                 .Include(p => p.PriceLists)
                 .Include(p => p.Shelf)
-                .Where(p => !p.IsDeleted)
+                .AsNoTracking()
+                .FirstOrDefaultAsync(p => p.Id == product.Id);
+
+            return _mapper.Map<ProductDto>(product);
+        }
+        
+        private async Task<bool> CanSeeDeletedAsync()
+        {
+            if (_currentUserService.IsRoot) return true;
+            return await _unitOfWork.Repository<UserPermission>().Query()
+                .Include(p => p.Module)
+                .AnyAsync(p => p.UserId == _currentUserService.UserId && 
+                               p.Module.ModuleName == "ShowDeletedItems" && 
+                               (p.CanRead || p.IsFull));
+        }
+
+        public async Task<System.Collections.Generic.IEnumerable<ProductDto>> GetAllAsync(string? status = null, string? searchTerm = null)
+        {
+            var canSeeDeleted = await CanSeeDeletedAsync();
+            IQueryable<Product> query = _unitOfWork.Repository<Product>().Query();
+
+            if (canSeeDeleted)
+            {
+                query = query.IgnoreQueryFilters();
+                if (status == "passive") query = query.Where(p => p.IsDeleted);
+                else if (status == "all") query = query.Where(p => true);
+                else query = query.Where(p => !p.IsDeleted);
+            }
+            else
+            {
+                // If can't see deleted, return empty if "passive" was requested
+                if (status == "passive") return new List<ProductDto>();
+                query = query.Where(p => !p.IsDeleted);
+            }
+            
+            if (!string.IsNullOrWhiteSpace(searchTerm))
+            {
+                var search = searchTerm.ToLower();
+                query = query.Where(p => 
+                    p.ProductName.ToLower().Contains(search) || 
+                    p.ProductCode.ToLower().Contains(search) || 
+                    (p.SystemCode != null && p.SystemCode.ToLower().Contains(search)) ||
+                    (p.Category != null && p.Category.CategoryName.ToLower().Contains(search)) || 
+                    (p.Brand != null && p.Brand.BrandName.ToLower().Contains(search)) ||
+                    (p.Warehouse != null && p.Warehouse.WarehouseName.ToLower().Contains(search))
+                );
+            }
+
+            var products = await query
+                .Include(p => p.Unit)
+                .Include(p => p.Category)
+                .Include(p => p.Brand)
+                .Include(p => p.Warehouse)
+                .Include(p => p.PriceLists)
+                .Include(p => p.Shelf)
+                .OrderByDescending(p => p.Id)
                 .ToListAsync();
 
             var reserved = await _unitOfWork.Repository<OfferItem>().Query()
@@ -131,21 +185,78 @@ namespace S2O1.Business.Services.Implementation
             return result;
         }
 
-        public async Task<System.Collections.Generic.IEnumerable<S2O1.Business.DTOs.Stock.BrandDto>> GetAllBrandsAsync()
+        public async Task<System.Collections.Generic.IEnumerable<S2O1.Business.DTOs.Stock.BrandDto>> GetAllBrandsAsync(string? status = null, string? searchTerm = null)
         {
-            var data = await _unitOfWork.Repository<Brand>().FindAsync(b => !b.IsDeleted);
+            var query = _unitOfWork.Repository<Brand>().Query();
+            if (await CanSeeDeletedAsync())
+            {
+                query = query.IgnoreQueryFilters();
+                if (status == "passive") query = query.Where(x => x.IsDeleted);
+                else if (status == "all") query = query.Where(x => true);
+                else query = query.Where(x => !x.IsDeleted);
+            }
+            else
+            {
+                query = query.Where(x => !x.IsDeleted);
+            }
+
+            if (!string.IsNullOrWhiteSpace(searchTerm))
+            {
+                var search = searchTerm.ToLower();
+                query = query.Where(x => x.BrandName.ToLower().Contains(search));
+            }
+
+            var data = await query.OrderByDescending(x => x.Id).ToListAsync();
             return _mapper.Map<System.Collections.Generic.IEnumerable<S2O1.Business.DTOs.Stock.BrandDto>>(data);
         }
 
-        public async Task<System.Collections.Generic.IEnumerable<S2O1.Business.DTOs.Stock.CategoryDto>> GetAllCategoriesAsync()
+        public async Task<System.Collections.Generic.IEnumerable<S2O1.Business.DTOs.Stock.CategoryDto>> GetAllCategoriesAsync(string? status = null, string? searchTerm = null)
         {
-            var data = await _unitOfWork.Repository<Category>().FindAsync(c => !c.IsDeleted);
+            var query = _unitOfWork.Repository<Category>().Query();
+            if (await CanSeeDeletedAsync())
+            {
+                query = query.IgnoreQueryFilters();
+                if (status == "passive") query = query.Where(x => x.IsDeleted);
+                else if (status == "all") query = query.Where(x => true);
+                else query = query.Where(x => !x.IsDeleted);
+            }
+            else
+            {
+                query = query.Where(x => !x.IsDeleted);
+            }
+
+            if (!string.IsNullOrWhiteSpace(searchTerm))
+            {
+                var search = searchTerm.ToLower();
+                query = query.Where(x => x.CategoryName.ToLower().Contains(search));
+            }
+
+            var data = await query.OrderByDescending(x => x.Id).ToListAsync();
             return _mapper.Map<System.Collections.Generic.IEnumerable<S2O1.Business.DTOs.Stock.CategoryDto>>(data);
         }
 
-        public async Task<System.Collections.Generic.IEnumerable<S2O1.Business.DTOs.Stock.UnitDto>> GetAllUnitsAsync()
+        public async Task<System.Collections.Generic.IEnumerable<S2O1.Business.DTOs.Stock.UnitDto>> GetAllUnitsAsync(string? status = null, string? searchTerm = null)
         {
-            var data = await _unitOfWork.Repository<ProductUnit>().FindAsync(u => !u.IsDeleted);
+            var query = _unitOfWork.Repository<ProductUnit>().Query();
+            if (await CanSeeDeletedAsync())
+            {
+                query = query.IgnoreQueryFilters();
+                if (status == "passive") query = query.Where(x => x.IsDeleted);
+                else if (status == "all") query = query.Where(x => true);
+                else query = query.Where(x => !x.IsDeleted);
+            }
+            else
+            {
+                query = query.Where(x => !x.IsDeleted);
+            }
+
+            if (!string.IsNullOrWhiteSpace(searchTerm))
+            {
+                var search = searchTerm.ToLower();
+                query = query.Where(x => x.UnitName.ToLower().Contains(search) || x.UnitShortName.ToLower().Contains(search));
+            }
+
+            var data = await query.OrderByDescending(x => x.Id).ToListAsync();
             return _mapper.Map<System.Collections.Generic.IEnumerable<S2O1.Business.DTOs.Stock.UnitDto>>(data);
         }
 
@@ -250,9 +361,14 @@ namespace S2O1.Business.Services.Implementation
             return true;
         }
 
-        public async Task<S2O1.Business.Services.Interfaces.ProductDto> UpdateAsync(S2O1.Business.Services.Interfaces.UpdateProductDto dto)
+        public async Task<ProductDto> UpdateAsync(UpdateProductDto dto)
         {
-            var product = await _unitOfWork.Repository<Product>().GetByIdAsync(dto.Id);
+            var product = await _unitOfWork.Repository<Product>().Query()
+                .Include(p => p.Unit)
+                .Include(p => p.PriceLists)
+                .Include(p => p.Shelf)
+                .FirstOrDefaultAsync(p => p.Id == dto.Id);
+
             if (product == null) return null;
 
             product.ProductName = dto.ProductName;
@@ -268,7 +384,7 @@ namespace S2O1.Business.Services.Implementation
             if (dto.AddedStock > 0)
             {
                 var userId = _currentUserService.UserId ?? 0;
-                if (userId == 0) throw new System.Exception("User ID is missing. Cannot Create Stock Movement.");
+                if (userId == 0) throw new System.Exception("Kullanıcı kimliği bulunamadı. Stok hareketi oluşturulamadı.");
 
                 product.CurrentStock += dto.AddedStock;
                 
@@ -278,7 +394,7 @@ namespace S2O1.Business.Services.Implementation
                     Quantity = dto.AddedStock,
                     MovementType = S2O1.Domain.Enums.MovementType.Entry,
                     MovementDate = System.DateTime.Now,
-                    Description = "Additional Stock Entry (Update)",
+                    Description = "Ek Stok Girişi (Güncelleme)",
                     WarehouseId = dto.WarehouseId.GetValueOrDefault(), 
                     CreateDate = System.DateTime.Now,
                     IsActive = true,

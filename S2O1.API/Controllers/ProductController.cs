@@ -50,12 +50,13 @@ namespace S2O1.API.Controllers
              }
              catch(System.Exception ex)
              {
-                 return BadRequest(ex.Message);
+                 var innerMsg = ex.InnerException != null ? ex.InnerException.Message : ex.Message;
+                 return BadRequest(new { message = $"Hata: {ex.Message}", details = innerMsg });
              }
         }
 
         [HttpGet("{id}")]
-        [Filters.Permission("Product", "Read")]
+        [Filters.Permission(new[] { "Product", "Offers" }, "Read")]
         public async Task<IActionResult> Get(int id)
         {
             var p = await _productService.GetByIdAsync(id);
@@ -64,10 +65,10 @@ namespace S2O1.API.Controllers
         }
 
         [HttpGet]
-        [Filters.Permission("Product", "Read")]
-        public async Task<IActionResult> GetAll()
+        [Filters.Permission(new[] { "Product", "Offers" }, "Read")]
+        public async Task<IActionResult> GetAll([FromQuery] string? status = null, [FromQuery] string? searchTerm = null)
         {
-            var p = await _productService.GetAllAsync();
+            var p = await _productService.GetAllAsync(status, searchTerm);
             return Ok(p);
         }
 
@@ -83,7 +84,8 @@ namespace S2O1.API.Controllers
              }
              catch(System.Exception ex)
              {
-                 return BadRequest(ex.Message);
+                 var innerMsg = ex.InnerException != null ? ex.InnerException.Message : ex.Message;
+                 return BadRequest(new { message = $"Hata: {ex.Message}", details = innerMsg });
              }
         }
 
@@ -97,36 +99,37 @@ namespace S2O1.API.Controllers
         }
 
         [HttpGet("brands")]
-        [Filters.Permission("Product", "Read")]
-        public async Task<IActionResult> GetBrands()
+        [Filters.Permission(new[] { "Product", "Reports" }, "Read")]
+        public async Task<IActionResult> GetBrands([FromQuery] string? status = null, [FromQuery] string? searchTerm = null)
         {
-            var data = await _productService.GetAllBrandsAsync();
+            var data = await _productService.GetAllBrandsAsync(status, searchTerm);
             return Ok(data);
         }
 
         [HttpGet("categories")]
-        public async Task<IActionResult> GetCategories()
+        public async Task<IActionResult> GetCategories([FromQuery] string? status = null, [FromQuery] string? searchTerm = null)
         {
-            // Allow if has Category:Read OR Product:Read OR Product:Write
-            // Used for dropdowns in Product Add/Edit
+            // Allow if has Category:Read OR Product:Read OR Product:Write OR Offers:Read OR Reports:Read
             bool canReadCategory = await HasPermissionAsync("Category", "Read");
             bool canReadProduct = await HasPermissionAsync("Product", "Read");
             bool canWriteProduct = await HasPermissionAsync("Product", "Write");
+            bool canReadOffers = await HasPermissionAsync("Offers", "Read");
+            bool canReadReports = await HasPermissionAsync("Reports", "Read");
 
-            if (!canReadCategory && !canReadProduct && !canWriteProduct)
+            if (!canReadCategory && !canReadProduct && !canWriteProduct && !canReadOffers && !canReadReports)
             {
                return Forbid();
             }
 
-            var data = await _productService.GetAllCategoriesAsync();
+            var data = await _productService.GetAllCategoriesAsync(status, searchTerm);
             return Ok(data);
         }
 
         [HttpGet("units")]
-        [Filters.Permission("Product", "Read")]
-        public async Task<IActionResult> GetUnits()
+        [Filters.Permission(new[] { "Product", "Offers", "Reports" }, "Read")]
+        public async Task<IActionResult> GetUnits([FromQuery] string? status = null, [FromQuery] string? searchTerm = null)
         {
-            var data = await _productService.GetAllUnitsAsync();
+            var data = await _productService.GetAllUnitsAsync(status, searchTerm);
             return Ok(data);
         }
         [HttpPost("brands")]

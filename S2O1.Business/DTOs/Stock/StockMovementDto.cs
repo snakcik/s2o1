@@ -53,4 +53,13 @@ namespace S2O1.Business.DTOs.Stock
         public string DocumentPath { get; set; }
         public decimal TotalQuantity { get; set; }
     }
+    public class WaybillItemDto
+    {
+        public int ProductId { get; set; }
+        public string ProductCode { get; set; }
+        public string ProductName { get; set; }
+        public decimal Quantity { get; set; }
+        public string UnitName { get; set; }
+        public string Description { get; set; }
+    }
 }

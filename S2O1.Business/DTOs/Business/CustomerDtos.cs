@@ -6,6 +6,7 @@ namespace S2O1.Business.DTOs.Business
         public string CustomerCompanyName { get; set; }
         public string CustomerCompanyAddress { get; set; }
         public string CustomerCompanyMail { get; set; }
+        public bool IsDeleted { get; set; }
     }
 
     public class CreateCustomerCompanyDto
@@ -30,6 +31,7 @@ namespace S2O1.Business.DTOs.Business
         public string CustomerContactPersonMobilPhone { get; set; }
         public string CustomerContactPersonMail { get; set; }
         public string FullName => $"{CustomerContactPersonName} {CustomerContactPersonLastName}";
+        public bool IsDeleted { get; set; }
     }
 
     public class CreateCustomerDto

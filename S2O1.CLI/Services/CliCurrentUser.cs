@@ -9,6 +9,7 @@ namespace S2O1.CLI.Services
         public string UserRole { get; private set; }
         public string Source => "CLI";
         public string IpAddress => "Localhost";
+        public bool IsRoot => UserId == 1;
 
         public void SetUser(int userId, string userName, string role)
         {

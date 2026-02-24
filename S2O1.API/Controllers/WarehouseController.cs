@@ -15,16 +15,36 @@ namespace S2O1.API.Controllers
             _warehouseService = warehouseService;
         }
 
+        // ===== DEPO PANEL (Warehouse) endpoints - Warehouse:Read yetkisi yeterli =====
+
         [HttpGet]
-        [Filters.Permission("Warehouse", "Read")]
-        public async Task<IActionResult> GetAll()
+        [Filters.Permission(new[] { "Warehouse", "WarehouseManagement", "Offers", "Reports" }, "Read")]
+        public async Task<IActionResult> GetAll([FromQuery] string? status = null, [FromQuery] string? searchTerm = null)
         {
-            var list = await _warehouseService.GetAllAsync();
+            var list = await _warehouseService.GetAllAsync(status, searchTerm);
             return Ok(list);
         }
 
+        [HttpGet("shelves")]
+        [Filters.Permission(new[] { "Warehouse", "WarehouseManagement", "Offers", "Reports" }, "Read")]
+        public async Task<IActionResult> GetAllShelves([FromQuery] string? status = null)
+        {
+            var list = await _warehouseService.GetAllShelvesAsync(status);
+            return Ok(list);
+        }
+
+        [HttpGet("{id}/shelves")]
+        [Filters.Permission(new[] { "Warehouse", "WarehouseManagement", "Offers", "Reports" }, "Read")]
+        public async Task<IActionResult> GetShelves(int id)
+        {
+            var list = await _warehouseService.GetShelvesAsync(id);
+            return Ok(list);
+        }
+
+        // ===== DEPO YÖNETİMİ (WarehouseManagement) endpoints - Sadece WarehouseManagement yetkisi =====
+
         [HttpPost]
-        [Filters.Permission("Warehouse", "Write")]
+        [Filters.Permission("WarehouseManagement", "Write")]
         public async Task<IActionResult> Create([FromBody] CreateWarehouseDto dto)
         {
             try
@@ -39,7 +59,7 @@ namespace S2O1.API.Controllers
         }
 
         [HttpPut]
-        [Filters.Permission("Warehouse", "Write")]
+        [Filters.Permission("WarehouseManagement", "Write")]
         public async Task<IActionResult> Update([FromBody] UpdateWarehouseDto dto)
         {
             var updated = await _warehouseService.UpdateAsync(dto);
@@ -48,7 +68,7 @@ namespace S2O1.API.Controllers
         }
 
         [HttpDelete("{id}")]
-        [Filters.Permission("Warehouse", "Delete")]
+        [Filters.Permission("WarehouseManagement", "Delete")]
         public async Task<IActionResult> Delete(int id)
         {
             var res = await _warehouseService.DeleteAsync(id);
@@ -56,24 +76,8 @@ namespace S2O1.API.Controllers
             return Ok();
         }
 
-        [HttpGet("shelves")]
-        [Filters.Permission("Warehouse", "Read")]
-        public async Task<IActionResult> GetAllShelves()
-        {
-            var list = await _warehouseService.GetAllShelvesAsync();
-            return Ok(list);
-        }
-
-        [HttpGet("{id}/shelves")]
-        [Filters.Permission("Warehouse", "Read")]
-        public async Task<IActionResult> GetShelves(int id)
-        {
-            var list = await _warehouseService.GetShelvesAsync(id);
-            return Ok(list);
-        }
-
         [HttpPost("shelves")]
-        [Filters.Permission("Warehouse", "Write")]
+        [Filters.Permission("WarehouseManagement", "Write")]
         public async Task<IActionResult> CreateShelf([FromBody] CreateWarehouseShelfDto dto)
         {
             try
@@ -88,7 +92,7 @@ namespace S2O1.API.Controllers
         }
 
         [HttpDelete("shelves/{id}")]
-        [Filters.Permission("Warehouse", "Delete")]
+        [Filters.Permission("WarehouseManagement", "Delete")]
         public async Task<IActionResult> DeleteShelf(int id)
         {
             var res = await _warehouseService.DeleteShelfAsync(id);

@@ -18,10 +18,19 @@ namespace S2O1.API.Controllers
 
         [HttpGet]
         [Filters.Permission("Companies", "Read")]
-        public async Task<IActionResult> GetAll()
+        public async Task<IActionResult> GetAll([FromQuery] string? status = null)
         {
-            var list = await _companyService.GetAllAsync();
+            var list = await _companyService.GetAllAsync(status);
             return Ok(list);
+        }
+
+        [HttpGet("{id}")]
+        [Filters.Permission("Companies", "Read")]
+        public async Task<IActionResult> GetById(int id)
+        {
+            var company = await _companyService.GetByIdAsync(id);
+            if (company == null) return NotFound();
+            return Ok(company);
         }
 
         [HttpPost]
@@ -31,7 +40,22 @@ namespace S2O1.API.Controllers
             try
             {
                 var created = await _companyService.CreateAsync(dto);
-                return CreatedAtAction(nameof(GetAll), new { id = created.Id }, created);
+                return CreatedAtAction(nameof(GetById), new { id = created.Id }, created);
+            }
+            catch (System.Exception ex)
+            {
+                return BadRequest(new { message = ex.Message });
+            }
+        }
+
+        [HttpPut("{id}")]
+        [Filters.Permission("Companies", "Write")]
+        public async Task<IActionResult> Update(int id, [FromBody] CreateCompanyDto dto)
+        {
+            try
+            {
+                var result = await _companyService.UpdateAsync(id, dto);
+                return Ok(result);
             }
             catch (System.Exception ex)
             {

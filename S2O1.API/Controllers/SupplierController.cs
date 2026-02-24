@@ -19,9 +19,9 @@ namespace S2O1.API.Controllers
 
         [HttpGet]
         [Filters.Permission("Supplier", "Read")]
-        public async Task<ActionResult<IEnumerable<SupplierDto>>> GetAll()
+        public async Task<ActionResult<IEnumerable<SupplierDto>>> GetAll([FromQuery] string? status = null)
         {
-            var suppliers = await _supplierService.GetAllAsync();
+            var suppliers = await _supplierService.GetAllAsync(status);
             return Ok(suppliers);
         }
 

@@ -31,6 +31,10 @@ namespace S2O1.Business.Common.Mappings
             // Add more mappings
             CreateMap<Invoice, InvoiceDto>()
                 .ForMember(d => d.AssignedDelivererUserName, o => o.MapFrom(s => s.AssignedDelivererUser != null ? s.AssignedDelivererUser.UserFirstName + " " + s.AssignedDelivererUser.UserLastName : null))
+                .ForMember(d => d.BuyerCompanyName, o => o.MapFrom(s => s.BuyerCompany != null ? s.BuyerCompany.CustomerCompanyName : (s.Offer != null && s.Offer.Customer != null && s.Offer.Customer.CustomerCompany != null ? s.Offer.Customer.CustomerCompany.CustomerCompanyName : "")))
+                .ForMember(d => d.BuyerCompanyAddress, o => o.MapFrom(s => s.BuyerCompany != null ? s.BuyerCompany.CustomerCompanyAddress : (s.Offer != null && s.Offer.Customer != null && s.Offer.Customer.CustomerCompany != null ? s.Offer.Customer.CustomerCompany.CustomerCompanyAddress : "")))
+                .ForMember(d => d.BuyerCompanyTaxInfo, o => o.MapFrom(s => s.BuyerCompany != null ? s.BuyerCompany.CustomerCompanyMail : (s.Offer != null && s.Offer.Customer != null && s.Offer.Customer.CustomerCompany != null ? s.Offer.Customer.CustomerCompany.CustomerCompanyMail : "")))
+                .ForMember(d => d.IsDeleted, o => o.MapFrom(s => s.IsDeleted))
                 .ReverseMap();
                 
             CreateMap<InvoiceItem, InvoiceItemDto>()
@@ -41,31 +45,46 @@ namespace S2O1.Business.Common.Mappings
                 .ReverseMap();
             CreateMap<Offer, OfferDto>()
                 .ForMember(d => d.CustomerName, o => o.MapFrom(s => s.Customer.CustomerCompany.CustomerCompanyName))
+                .ForMember(d => d.IsDeleted, o => o.MapFrom(s => s.IsDeleted))
                 .ReverseMap();
             CreateMap<OfferItem, OfferItemDto>()
-                .ForMember(d => d.ProductName, o => o.MapFrom(s => s.Product.ProductName))
-                .ForMember(d => d.ProductCode, o => o.MapFrom(s => s.Product.ProductCode))
-                .ForMember(d => d.ImageUrl, o => o.MapFrom(s => s.Product.ImageUrl))
+                .ForMember(d => d.ProductName, o => o.MapFrom(s => s.Product != null ? s.Product.ProductName : ""))
+                .ForMember(d => d.ProductCode, o => o.MapFrom(s => s.Product != null ? s.Product.ProductCode : ""))
+                .ForMember(d => d.ImageUrl, o => o.MapFrom(s => s.Product != null ? s.Product.ImageUrl : ""))
+                .ForMember(d => d.CategoryName, o => o.MapFrom(s => (s.Product != null && s.Product.Category != null) ? s.Product.Category.CategoryName : "Diğer"))
                 .ReverseMap();
             CreateMap<Offer, CreateOfferDto>().ReverseMap();
             CreateMap<OfferItem, CreateOfferItemDto>().ReverseMap();
-            CreateMap<Brand, BrandDto>().ReverseMap();
+            CreateMap<Brand, BrandDto>()
+                .ForMember(d => d.IsDeleted, o => o.MapFrom(s => s.IsDeleted))
+                .ReverseMap();
             CreateMap<Brand, CreateBrandDto>().ReverseMap();
-            CreateMap<Category, CategoryDto>().ReverseMap();
+            CreateMap<Category, CategoryDto>()
+                .ForMember(d => d.IsDeleted, o => o.MapFrom(s => s.IsDeleted))
+                .ReverseMap();
             CreateMap<Category, CreateCategoryDto>().ReverseMap();
-            CreateMap<ProductUnit, UnitDto>().ForMember(d => d.UnitName, o => o.MapFrom(s => s.UnitName)).ReverseMap();
+            CreateMap<ProductUnit, UnitDto>()
+                .ForMember(d => d.UnitName, o => o.MapFrom(s => s.UnitName))
+                .ForMember(d => d.IsDeleted, o => o.MapFrom(s => s.IsDeleted))
+                .ReverseMap();
             CreateMap<ProductUnit, CreateUnitDto>().ReverseMap();
 
             CreateMap<Product, ProductDto>()
-                .ForMember(d => d.UnitName, o => o.MapFrom(s => s.Unit.UnitName))
-                .ForMember(d => d.CurrentPrice, o => o.MapFrom(s => s.PriceLists.FirstOrDefault(p => p.IsActivePrice).SalePrice))
-                .ForMember(d => d.Currency, o => o.MapFrom(s => s.PriceLists.FirstOrDefault(p => p.IsActivePrice).Currency))
+                .ForMember(d => d.UnitName, o => o.MapFrom(s => s.Unit != null ? s.Unit.UnitName : null))
+                .ForMember(d => d.CategoryName, o => o.MapFrom(s => s.Category != null ? s.Category.CategoryName : null))
+                .ForMember(d => d.BrandName, o => o.MapFrom(s => s.Brand != null ? s.Brand.BrandName : null))
+                .ForMember(d => d.WarehouseName, o => o.MapFrom(s => s.Warehouse != null ? s.Warehouse.WarehouseName : null))
+                .ForMember(d => d.CurrentPrice, o => o.MapFrom(s => s.PriceLists.Where(p => p.IsActivePrice).Select(p => p.SalePrice).FirstOrDefault()))
+                .ForMember(d => d.Currency, o => o.MapFrom(s => s.PriceLists.Where(p => p.IsActivePrice).Select(p => p.Currency).FirstOrDefault()))
                 .ForMember(d => d.ShelfName, o => o.MapFrom(s => s.Shelf != null ? s.Shelf.Name : null))
+                .ForMember(d => d.IsDeleted, o => o.MapFrom(s => s.IsDeleted))
                 .ReverseMap();
             CreateMap<Product, CreateProductDto>().ReverseMap();
             CreateMap<Product, UpdateProductDto>().ReverseMap();
 
-            CreateMap<Supplier, S2O1.Business.DTOs.Business.SupplierDto>().ReverseMap();
+            CreateMap<Supplier, S2O1.Business.DTOs.Business.SupplierDto>()
+                .ForMember(d => d.IsDeleted, o => o.MapFrom(s => s.IsDeleted))
+                .ReverseMap();
             CreateMap<Supplier, S2O1.Business.DTOs.Business.CreateSupplierDto>().ReverseMap();
             CreateMap<Supplier, S2O1.Business.DTOs.Business.UpdateSupplierDto>().ReverseMap();
 
@@ -77,12 +96,15 @@ namespace S2O1.Business.Common.Mappings
             CreateMap<PriceList, CreatePriceListDto>().ReverseMap();
             CreateMap<PriceList, UpdatePriceListDto>().ReverseMap();
 
-            CreateMap<CustomerCompany, CustomerCompanyDto>().ReverseMap();
+            CreateMap<CustomerCompany, CustomerCompanyDto>()
+                .ForMember(d => d.IsDeleted, o => o.MapFrom(s => s.IsDeleted))
+                .ReverseMap();
             CreateMap<CustomerCompany, CreateCustomerCompanyDto>().ReverseMap();
             CreateMap<CustomerCompany, UpdateCustomerCompanyDto>().ReverseMap();
 
             CreateMap<Customer, CustomerDto>()
                 .ForMember(d => d.CustomerCompanyName, o => o.MapFrom(s => s.CustomerCompany.CustomerCompanyName))
+                .ForMember(d => d.IsDeleted, o => o.MapFrom(s => s.IsDeleted))
                 .ReverseMap();
             CreateMap<Customer, CreateCustomerDto>().ReverseMap();
             CreateMap<Customer, UpdateCustomerDto>().ReverseMap();
@@ -97,6 +119,7 @@ namespace S2O1.Business.Common.Mappings
             // Logistic
             CreateMap<WarehouseShelf, WarehouseShelfDto>()
                 .ForMember(d => d.WarehouseName, o => o.MapFrom(s => s.Warehouse != null ? s.Warehouse.WarehouseName : ""))
+                .ForMember(d => d.IsDeleted, o => o.MapFrom(s => s.IsDeleted))
                 .ReverseMap();
             CreateMap<WarehouseShelf, CreateWarehouseShelfDto>().ReverseMap();
 

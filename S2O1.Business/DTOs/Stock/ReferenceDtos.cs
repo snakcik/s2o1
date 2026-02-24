@@ -4,6 +4,7 @@ namespace S2O1.Business.DTOs.Stock
     {
         public int Id { get; set; }
         public string BrandName { get; set; }
+        public bool IsDeleted { get; set; }
     }
 
     public class CategoryDto
@@ -11,6 +12,7 @@ namespace S2O1.Business.DTOs.Stock
         public int Id { get; set; }
         public string CategoryName { get; set; }
         public int? ParentCategoryId { get; set; }
+        public bool IsDeleted { get; set; }
     }
 
     public class UnitDto
@@ -18,6 +20,7 @@ namespace S2O1.Business.DTOs.Stock
         public int Id { get; set; }
         public string UnitName { get; set; }
         public string UnitShortName { get; set; }
+        public bool IsDeleted { get; set; }
     }
 
     public class CreateBrandDto { public string BrandName { get; set; } public string BrandDescription { get; set; } }

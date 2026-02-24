@@ -5,7 +5,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>2S1O - Dashboard</title>
-    <link rel="stylesheet" href="s2o1.css">
+    <link rel="stylesheet" href="s2o1.css?v=3">
     <style>
         /* Global Dashboard Fixes */
         body {
@@ -17,12 +17,86 @@
 
         .main-content {
             width: 100%;
-            max-width: calc(100vw - 320px);
-            margin: 0 !important;
-            padding: 2rem 3rem 2rem 2rem !important;
-            /* Extra padding on right to ensure radius is visible */
+            margin: 0;
+            padding: 2rem;
             box-sizing: border-box;
             overflow-x: hidden;
+        }
+
+        @media (min-width: 1025px) {
+            .main-content {
+                max-width: calc(100vw - 320px);
+                padding: 2rem 3rem 2rem 2rem;
+                /* Extra padding on right to ensure radius is visible */
+            }
+        }
+
+        @media (max-width: 1024px) {
+            .main-content {
+                max-width: calc(100vw - 80px);
+                /* Sidebar is 80px max */
+                padding: 1.5rem;
+            }
+        }
+
+        @media (max-width: 768px) {
+            .main-content {
+                max-width: 100vw;
+                padding: 4rem 1rem 1rem 1rem !important;
+                /* space for toggle */
+            }
+
+            .glass-card {
+                padding: 1.25rem !important;
+                max-width: 100% !important;
+            }
+
+            .user-table {
+                display: block;
+                overflow-x: auto;
+                white-space: nowrap;
+                font-size: 0.8rem;
+                /* smaller text */
+            }
+
+            .user-table th,
+            .user-table td {
+                padding: 0.75rem;
+            }
+
+            .grid {
+                grid-template-columns: 1fr !important;
+                /* force single col */
+                gap: 0.75rem !important;
+            }
+
+            .modal-overlay .glass-card {
+                width: 95% !important;
+                padding: 1.5rem !important;
+                margin: 0 auto;
+                max-height: 85vh !important;
+                overflow-y: auto !important;
+            }
+
+            .qa-config-grid {
+                grid-template-columns: 1fr !important;
+            }
+
+            h1,
+            h2,
+            h3 {
+                font-size: 1.2rem;
+            }
+
+            .action-btn-container {
+                flex-wrap: wrap;
+                /* allow wrap if too many */
+            }
+
+            .btn-create {
+                width: 100% !important;
+                /* full width create button */
+            }
         }
 
         :root {
@@ -525,6 +599,7 @@
 </head>
 
 <body>
+    <div id="toastContainer" class="toast-container"></div>
     <div class="dashboard-layout">
         <!-- Sidebar -->
         <div class="sidebar" id="sidebar">
@@ -554,10 +629,10 @@
                     <div class="menu-item" data-module="Stock" onclick="switchView('waybill-history')">📜
                         <span>İrsaliye Geçmişi</span>
                     </div>
-                    <div class="menu-item" data-module="Warehouse" onclick="switchView('warehouses')">🏠
+                    <div class="menu-item" data-module="WarehouseManagement" onclick="switchView('warehouses')">🏠
                         <span>Depolar</span>
                     </div>
-                    <div class="menu-item" data-module="Warehouse" onclick="switchView('shelves')">🪜
+                    <div class="menu-item" data-module="WarehouseManagement" onclick="switchView('shelves')">🪜
                         <span>Raf Yönetimi</span>
                     </div>
                 </div>
@@ -725,6 +800,7 @@
                 </div>
             </div>
             <div id="section-companies" class="view-section" style="display:none;">
+                <div id="filter-container-companies"></div>
                 <div style="margin-bottom: 1rem; display:flex; justify-content:flex-end;">
                     <button class="btn-create" data-permission="Companies:Write" onclick="openCompanyModal()">🏢 + Yeni
                         Şirket</button>
@@ -750,10 +826,20 @@
 
             <!-- SECTION: INVENTORY -->
             <div id="section-inventory" class="view-section" style="display:none;">
+                <div id="filter-container-inventory"></div>
+                <div
+                    style="display:flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; flex-wrap: wrap; gap: 1rem;">
+                    <div style="position: relative; width: 100%; max-width: 400px;">
+                        <input type="text" id="inventorySearchInput" class="form-control" placeholder="Hızlı Ara..."
+                            style="padding-left: 2.5rem; border-radius: 12px; border: 1px solid #e2e8f0; height: 42px;">
+                        <span
+                            style="position: absolute; left: 1rem; top: 50%; transform: translateY(-50%); color: #94a3b8;">🔍</span>
+                    </div>
+                </div>
                 <div style="display:flex; gap:0.5rem; margin-bottom:1rem; flex-wrap:wrap;">
                     <button class="tab-inv-btn active" data-tab="products" data-permission="Product:Read"
                         onclick="switchInvTab('products')">📦 Ürünler</button>
-                    <button class="tab-inv-btn" data-tab="warehouses" data-permission="Warehouse:Read"
+                    <button class="tab-inv-btn" data-tab="warehouses" data-permission="WarehouseManagement:Read"
                         onclick="switchInvTab('warehouses')">🏠 Depolar</button>
                     <button class="tab-inv-btn" data-tab="brands" data-permission="Product:Read"
                         onclick="switchInvTab('brands')">🏷️ Markalar</button>
@@ -775,7 +861,6 @@
                                 <tr>
                                     <th>Resim</th>
                                     <th>Ürün Kodu</th>
-                                    <th>Sistem Kodu</th>
                                     <th>Ad</th>
                                     <th>Kategori</th>
                                     <th>Marka</th>
@@ -796,7 +881,8 @@
                 <!-- TAB WAREHOUSES -->
                 <div id="tab-inv-warehouses" class="inv-tab" style="display:none;">
                     <div style="margin-bottom: 1rem; display:flex; justify-content:flex-end;">
-                        <button class="btn-create" onclick="openWarehouseModal()" data-permission="Warehouse:Write">🏠 +
+                        <button class="btn-create" onclick="openWarehouseModal()"
+                            data-permission="WarehouseManagement:Write">🏠 +
                             Yeni Depo</button>
                     </div>
                     <div class="glass-card" style="padding:0; overflow-x:auto;">
@@ -873,6 +959,7 @@
 
             <!-- SECTION: INVOICES -->
             <div id="section-invoices" class="view-section" style="display:none;">
+                <div id="filter-container-invoices" style="margin-bottom: 1rem;"></div>
                 <div class="glass-card" style="padding:0; overflow-x:auto;">
                     <table class="user-table">
                         <thead>
@@ -896,6 +983,7 @@
 
             <!-- SECTION: SUPPLIERS -->
             <div id="section-suppliers" class="view-section" style="display:none;">
+                <div id="filter-container-suppliers" style="margin-bottom: 1rem;"></div>
                 <div style="margin-bottom: 1rem; display:flex; justify-content:flex-end;">
                     <button class="btn-create" data-permission="Supplier:Write" onclick="openSupplierModal()">🚚 + Yeni
                         Tedarikçi</button>
@@ -950,6 +1038,7 @@
 
             <!-- SECTION: CUSTOMER COMPANIES -->
             <div id="section-customer-companies" class="view-section" style="display:none;">
+                <div id="filter-container-customer-companies" style="margin-bottom: 1rem;"></div>
                 <div style="margin-bottom: 1rem; display:flex; justify-content:flex-end;">
                     <button class="btn-create" data-permission="Customer:Write" onclick="openCustomerCompanyModal()">🤝
                         + Yeni Müşteri Şirketi</button>
@@ -975,6 +1064,7 @@
 
             <!-- SECTION: CUSTOMERS -->
             <div id="section-customers" class="view-section" style="display:none;">
+                <div id="filter-container-customers"></div>
                 <div style="margin-bottom: 1rem; display:flex; justify-content:flex-end;">
                     <button class="btn-create" data-permission="Customer:Write" onclick="openCustomerModal()">👤 + Yeni
                         Müşteri</button>
@@ -1001,7 +1091,18 @@
 
             <!-- SECTION: OFFERS -->
             <div id="section-offers" class="view-section" style="display:none;">
-                <div style="margin-bottom: 1rem; display:flex; justify-content:flex-end;">
+                <div id="filter-container-offers"></div>
+                <div style="margin-bottom: 1rem; display:flex; justify-content:space-between; align-items:center;">
+                    <div style="display:flex; gap: 1rem; align-items: center;">
+                        <label style="font-weight:600; color:#475569;">Durum:</label>
+                        <select id="offerStatusFilter" class="form-control" style="width: 200px; background:white;"
+                            onchange="loadOffers()">
+                            <option value="">Tümü</option>
+                            <option value="1">Onaysız (Bekleyen)</option>
+                            <option value="2">Onaylı</option>
+                            <option value="4">Faturalandırılmış</option>
+                        </select>
+                    </div>
                     <button class="btn-create" data-permission="Offers:Write" onclick="startOfferWizard()"
                         style="background: var(--primary-gradient);">✨ Teklif Hazırla</button>
                 </div>
@@ -1033,7 +1134,8 @@
                 <div class="glass-card">
                     <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1.5rem;">
                         <h2 style="margin:0;">Depo Tanımları</h2>
-                        <button class="btn-create" data-permission="Warehouse:Write" onclick="openWarehouseModal()">🏠 +
+                        <button class="btn-create" data-permission="WarehouseManagement:Write"
+                            onclick="openWarehouseModal()">🏠 +
                             Yeni Depo Ekle</button>
                     </div>
                     <div style="overflow-x:auto;">
@@ -1077,19 +1179,20 @@
             </div>
 
             <div id="section-users" class="view-section" style="display:none;">
+                <div id="filter-container-users"></div>
                 <div style="margin-bottom: 1rem; display:flex; justify-content:flex-end;">
-                    <button class="btn-create" data-permission="Users:Write" onclick="openModal()">👥 + Yeni
+                    <button class="btn-create" data-permission="Users:Write" onclick="openUserModal()">👥 + Yeni
                         Kullanıcı</button>
                 </div>
                 <div class="glass-card" style="padding:0; overflow-x:auto;">
                     <table class="user-table">
                         <thead>
                             <tr>
-                                <th>Kullanıcı Adı</th>
-                                <th>Ad Soyad</th>
-                                <th>Email</th>
-                                <th>Ünvan / Bölüm</th>
-                                <th>Rol</th>
+                                <th style="text-align:left;">Kullanıcı Adı</th>
+                                <th style="text-align:left;">Ad Soyad</th>
+                                <th style="text-align:left;">Email</th>
+                                <th style="text-align:left;">Ünvan / Bölüm</th>
+                                <th style="text-align:left;">Rol</th>
                                 <th style="text-align:right;">İşlemler</th>
                             </tr>
                         </thead>
@@ -1193,9 +1296,19 @@
                             </div>
                             <div
                                 style="display: flex; gap: 1rem; align-items: flex-end; flex-wrap: wrap; flex: 1; justify-content: flex-end;">
+                                <div style="min-width: 150px;">
+                                    <label
+                                        style="font-size:0.75rem; color:#64748b; font-weight:700; margin-bottom:0.25rem; display:block;">YÖN</label>
+                                    <select id="whType" onchange="loadWaybillHistoryView()" class="form-control"
+                                        style="background:white;">
+                                        <option value="Gelen">Gelen İrsaliyeler</option>
+                                        <option value="Giden">Giden İrsaliyeler</option>
+                                    </select>
+                                </div>
                                 <div style="min-width: 200px;">
                                     <label
-                                        style="font-size:0.75rem; color:#64748b; font-weight:700; margin-bottom:0.25rem; display:block;">TEDARİKÇİ</label>
+                                        style="font-size:0.75rem; color:#64748b; font-weight:700; margin-bottom:0.25rem; display:block;">İLGİLİ
+                                        KİŞİ/KURUM</label>
                                     <select id="whSupplier" onchange="runWaybillHistorySearch()" class="form-control"
                                         style="background:white;">
                                         <option value="">Tümü</option>
@@ -1227,21 +1340,11 @@
                             <table class="waybill-table" style="width:100%;">
                                 <thead style="text-align:left;">
                                     <tr style="background:transparent;">
-                                        <th
-                                            style="padding:1rem; color:#64748b; font-size:0.75rem; font-weight:800; text-transform:uppercase;">
-                                            İrsaliye No</th>
-                                        <th
-                                            style="padding:1rem; color:#64748b; font-size:0.75rem; font-weight:800; text-transform:uppercase;">
-                                            Ürün Bilgisi</th>
-                                        <th
-                                            style="padding:1rem; color:#64748b; font-size:0.75rem; font-weight:800; text-transform:uppercase;">
-                                            Tarih</th>
-                                        <th
-                                            style="padding:1rem; color:#64748b; font-size:0.75rem; font-weight:800; text-transform:uppercase;">
-                                            Miktar</th>
-                                        <th
-                                            style="padding:1rem; color:#64748b; font-size:0.75rem; font-weight:800; text-transform:uppercase;">
-                                            Belge</th>
+                                        <th style="text-align:left;">İrsaliye No</th>
+                                        <th style="text-align:left;">İlgili Kişi & Kurum</th>
+                                        <th style="text-align:left;">Tarih</th>
+                                        <th style="text-align:left;">Miktar</th>
+                                        <th style="text-align:right;">Belge</th>
                                     </tr>
                                 </thead>
                                 <tbody id="whHistoryBody">
@@ -1270,6 +1373,18 @@
                                 <option value="">Tüm Depolar</option>
                             </select>
                         </div>
+                        <div class="form-group" style="flex:1;">
+                            <label>Ürün Kodu ile Ara</label>
+                            <input type="text" id="reportProductCodeFilter"
+                                style="width:100%; padding:0.5rem; border:1px solid #e5e7eb; border-radius:8px;"
+                                placeholder="Örn: PRD-001">
+                        </div>
+                        <div class="form-group" style="flex:1;">
+                            <label>Ürün Adı ile Ara</label>
+                            <input type="text" id="reportProductNameFilter"
+                                style="width:100%; padding:0.5rem; border:1px solid #e5e7eb; border-radius:8px;"
+                                placeholder="Örn: Kablo">
+                        </div>
                         <button class="btn-primary" onclick="loadStockReport()"
                             style="width: auto; height:fit-content; margin-bottom:1.2rem;">Raporla</button>
                     </div>
@@ -1279,16 +1394,19 @@
                     <table class="user-table">
                         <thead>
                             <tr>
-                                <th>Depo</th>
-                                <th>Ürün Kodu</th>
-                                <th>Ürün Adı</th>
-                                <th>Mevcut Stok</th>
-                                <th>Birim</th>
+                                <th style="text-align:left;">Depo</th>
+                                <th style="text-align:left;">Ürün Kodu</th>
+                                <th style="text-align:left;">Ürün Adı</th>
+                                <th style="text-align:center;">Gerçek Stok</th>
+                                <th style="text-align:center;">Rezerve Stok</th>
+                                <th style="text-align:center;">Depoda Bekleyen</th>
+                                <th style="text-align:center;">Kullanılabilir Stok</th>
+                                <th style="text-align:left;">Birim</th>
                             </tr>
                         </thead>
                         <tbody id="reportListBody">
                             <tr>
-                                <td colspan="5" style="text-align:center;">Lütfen depo seçin veya raporla butonuna
+                                <td colspan="9" style="text-align:center;">Lütfen kriter seçin veya raporla butonuna
                                     basın.</td>
                             </tr>
                         </tbody>
@@ -1440,6 +1558,37 @@
                     </div>
                 </div>
 
+                <!-- SYSTEM RESTART SETTINGS (ROOT ONLY) -->
+                <div id="restartSettingsCard" class="collapsible-card" style="display:none;">
+                    <div class="collapsible-header" onclick="this.parentElement.classList.toggle('active')">
+                        <h3>🔄 Sistem Güncelleme ve Yeniden Başlatma</h3>
+                        <div class="collapsible-icon">▾</div>
+                    </div>
+                    <div class="collapsible-content">
+                        <div class="collapsible-inner">
+                            <div
+                                style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 1rem;">
+                                <p style="margin:0; font-size:0.9rem; color:var(--muted);">
+                                    Uygulama güncellemeleri sonrası sistemin otomatik yeniden başlatılacağı saati
+                                    belirleyin.
+                                </p>
+                                <button class="btn-create" onclick="triggerRestart()"
+                                    style="background:var(--error);">Şimdi Yeniden Başlat</button>
+                            </div>
+                            <div class="grid" style="grid-template-columns: 1fr 1fr; gap:1rem;">
+                                <div class="form-group">
+                                    <label>Güncelleme Saati (HH:mm)</label>
+                                    <input type="time" id="systemRestartTime" class="form-control">
+                                </div>
+                                <div class="form-group" style="display:flex; align-items:flex-end;">
+                                    <button class="btn-create" onclick="saveSystemSettings()"
+                                        style="width:100%;">Ayarları Kaydet</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
                 <!-- DATABASE SETTINGS (ROOT ONLY) -->
                 <div id="dbSettingsCard" class="collapsible-card" style="display:none;">
                     <div class="collapsible-header" onclick="this.parentElement.classList.toggle('active')">
@@ -1503,8 +1652,10 @@
 
             <!-- SECTION: SHELF MANAGEMENT -->
             <div id="section-shelves" class="view-section" style="display:none;">
+                <div id="filter-container-shelves"></div>
                 <div style="margin-bottom: 1rem; display:flex; justify-content:flex-end;">
-                    <button class="btn-create" onclick="openShelfModal()" data-permission="Warehouse:Write">🪜 + Yeni
+                    <button class="btn-create" onclick="openShelfModal()" data-permission="WarehouseManagement:Write">🪜
+                        + Yeni
                         Raf</button>
                 </div>
                 <div class="glass-card" style="padding:0; overflow-x:auto;">
@@ -1649,18 +1800,14 @@
 
             <!-- Step 1: Filter -->
             <div id="wizard-step-1" class="wizard-pane">
-                <div class="grid" style="grid-template-columns: 1fr 1fr 1fr; gap: 1rem;">
+                <div class="grid" style="grid-template-columns: 1fr 1fr; gap: 1rem;">
                     <div class="form-group">
                         <label>Müşteri</label>
                         <select id="wMusteri" class="form-select"></select>
                     </div>
                     <div class="form-group">
-                        <label>Depo</label>
+                        <label>Depo Filtresi (Opsiyonel)</label>
                         <select id="wDepo" class="form-select"></select>
-                    </div>
-                    <div class="form-group">
-                        <label>Kategori</label>
-                        <select id="wKategori" class="form-select"></select>
                     </div>
                 </div>
                 <div style="margin-top: 2rem; display: flex; justify-content: flex-end; gap: 1rem;">
@@ -1672,6 +1819,27 @@
 
             <!-- Step 2: Product Selection -->
             <div id="wizard-step-2" class="wizard-pane" style="display:none;">
+                <div style="margin-bottom: 1rem; display:flex; gap:1rem; flex-wrap:wrap; align-items:flex-end;">
+                    <div style="flex:1; min-width:250px;">
+                        <label
+                            style="font-size: 0.8rem; font-weight: 600; color: #475569; margin-bottom: 0.3rem; display: block;">🔍
+                            Ürün Ara</label>
+                        <div style="display:flex; gap:0.5rem;">
+                            <input type="text" id="wizardProductSearch" class="form-control"
+                                placeholder="Barkod / QR Taratın veya Ürün Adı Yazın..."
+                                oninput="filterWizardProducts()"
+                                onkeypress="if(event.key==='Enter') scanWizardProduct()">
+                            <button class="btn-primary" onclick="openScanner('wizardProductSearch', scanWizardProduct)"
+                                style="width:auto; padding:0 1rem;" title="Kamera ile Tara">📷</button>
+                        </div>
+                    </div>
+                    <div style="width: 250px;">
+                        <label
+                            style="font-size: 0.8rem; font-weight: 600; color: #475569; margin-bottom: 0.3rem; display: block;">📂
+                            Kategori Filtresi</label>
+                        <select id="wKategori" class="form-select" onchange="loadWizardProducts()"></select>
+                    </div>
+                </div>
                 <div class="glass-card"
                     style="padding: 0; max-height: 400px; overflow-y: auto; margin-bottom: 1.5rem; max-width: 100%;">
                     <table class="user-table">
@@ -1680,7 +1848,7 @@
                                 <th>Ürün Adı</th>
                                 <th>Stok</th>
                                 <th>Rezerve</th>
-                                <th style="color:var(--primary);">Kalan</th>
+                                <th>Kalan</th>
                                 <th>Birim</th>
                                 <th>Miktar</th>
                                 <th style="text-align:right;">Ekle</th>
@@ -1835,7 +2003,8 @@
     <div id="companyModal" class="modal-overlay"
         style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); z-index:1000; align-items:center; justify-content:center;">
         <div class="glass-card" style="max-width:400px; padding:2rem; background:white;">
-            <h3>Yeni Şirket</h3>
+            <h3 id="companyModalTitle">Şirket Bilgileri</h3>
+            <input type="hidden" id="cId">
             <div class="form-group"><input type="text" id="cName" placeholder="Şirket Adı"></div>
             <div class="form-group"><input type="text" id="cTax" placeholder="Vergi No"></div>
             <div class="form-group"><input type="text" id="cAddr" placeholder="Adres"></div>
@@ -1874,25 +2043,6 @@
 
     <!-- warehouseModal (Mevcut, kontrol edilecek) -->
 
-    <!-- Company Modal -->
-    <div id="companyModal" class="modal-overlay"
-        style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); z-index:1000; align-items:center; justify-content:center;">
-        <div class="glass-card" style="max-width:400px; padding:2rem; background:white;">
-            <h3>Yeni Şirket</h3>
-            <div class="form-group"><input type="text" id="cName" placeholder="Şirket Adı"></div>
-            <div class="form-group"><input type="text" id="cTax" placeholder="Vergi No"></div>
-            <div class="form-group"><input type="text" id="cAddr" placeholder="Adres"></div>
-            <div class="form-group" style="display:flex; align-items:center;">
-                <input type="checkbox" id="cNegative" style="margin-right:0.5rem;">
-                <label for="cNegative">Negatif Stok İzni</label>
-            </div>
-            <div style="display:flex; gap:1rem;">
-                <button class="btn-primary" onclick="createCompany()">Kaydet</button>
-                <button class="btn-primary" onclick="closeModal('companyModal')"
-                    style="background:#9ca3af;">İptal</button>
-            </div>
-        </div>
-    </div>
 
     <!-- Product Modal -->
     <div id="productModal" class="modal-overlay"
@@ -1900,18 +2050,14 @@
         <div class="glass-card" style="max-width:500px; padding:2rem; background:white;">
             <h3>Yeni Ürün</h3>
             <input type="hidden" id="pId">
-            <div class="grid" style="grid-template-columns: 1fr 1fr; gap:1rem;">
+            <div class="grid" style="grid-template-columns: 1fr; gap:1rem;">
                 <div class="form-group">
                     <label style="font-size:0.8rem; color:var(--muted); margin-bottom:0.2rem; display:block;">Ürün Kodu
                         (Manuel)</label>
                     <input type="text" id="pCode" placeholder="Ürün Kodu">
                 </div>
-                <div class="form-group">
-                    <label style="font-size:0.8rem; color:var(--muted); margin-bottom:0.2rem; display:block;">Sistem
-                        Kodu (Otomatik)</label>
-                    <input type="text" id="pSystemCode" placeholder="Sistem Tarafından Oluşturulur" disabled
-                        style="background:#f1f5f9; cursor:not-allowed;">
-                </div>
+                <!-- System Code Hidden per User Request -->
+                <input type="hidden" id="pSystemCode">
             </div>
             <div class="form-group" style="margin-top:0.5rem;">
                 <label style="font-size:0.8rem; color:var(--muted); margin-bottom:0.2rem; display:block;">Ürün
@@ -2186,12 +2332,22 @@
 
             <div class="grid" style="grid-template-columns: 2fr 1fr; gap: 2rem;">
                 <div>
-                    <h4>🛒 Ürün Sepeti</h4>
-                    <div style="margin-bottom: 1rem; display:flex; gap:0.5rem;">
-                        <input type="text" id="prepBarcodeScan" class="form-control"
-                            placeholder="Barkod / QR Taratın veya Kod Yazın..."
-                            onkeypress="if(event.key==='Enter') prepScanItem()">
-                        <button class="btn-primary" onclick="prepScanItem()" style="width:auto;">Ekle</button>
+                    <div style="margin-bottom: 1rem; display:flex; flex-direction:column; gap:0.5rem;">
+                        <div style="display:flex; gap:0.5rem; width:100%;">
+                            <input type="text" id="prepManualSelect" list="prepManualOptions" class="form-control"
+                                placeholder="Ürün Adı veya Kodu Ara (Elle Seçin)" style="flex:1;"
+                                onkeypress="if(event.key==='Enter') prepAddManualItem()">
+                            <datalist id="prepManualOptions"></datalist>
+                            <button class="btn-primary" onclick="prepAddManualItem()" style="width:auto;">Ekle</button>
+                        </div>
+                        <div style="display:flex; gap:0.5rem; width:100%;">
+                            <input type="text" id="prepBarcodeScan" class="form-control"
+                                placeholder="Barkod / QR Taratın veya Kod Yazın..."
+                                onkeypress="if(event.key==='Enter') prepScanItem()" style="flex:1;">
+                            <button class="btn-primary" onclick="openScanner('prepBarcodeScan', prepScanItem)"
+                                style="width:auto; padding:0 1rem;" title="Kamera ile Tara">📷</button>
+                            <button class="btn-primary" onclick="prepScanItem()" style="width:auto;">Tarat</button>
+                        </div>
                     </div>
 
                     <div class="glass-card" style="padding:0; overflow-x:auto;">
@@ -2231,6 +2387,27 @@
         </div>
     </div>
 
+    <!-- Dispatch Action Modal -->
+    <div id="dispatchActionModal" class="modal-overlay"
+        style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); z-index:2100; align-items:center; justify-content:center;">
+        <div class="glass-card" style="max-width:500px; padding:2rem; background:white; text-align:center;">
+            <div style="font-size:3rem; color:var(--success); margin-bottom:1rem;">✅</div>
+            <h3 style="margin-top:0;">Sevkiyat Tamamlandı!</h3>
+            <p style="color:var(--muted); margin-bottom:1.5rem;">İrsaliye başarıyla oluşturuldu ve stoklar düşüldü.
+                Lütfen yapmak istediğiniz işlemi seçin.</p>
+            <div style="display:flex; flex-direction:column; gap:1rem;">
+                <button class="btn-primary" onclick="printDispatch()" style="background:#3b82f6;">🖨️ İrsaliyeyi
+                    Yazdır</button>
+                <button class="btn-primary" onclick="downloadDispatch()" style="background:#8b5cf6;">💾 PDF Olarak
+                    İndir</button>
+                <button class="btn-primary" onclick="emailDispatch()" style="background:#10b981;">📧 Müşteriye Mail
+                    At</button>
+                <button class="btn-primary" onclick="closeModal('dispatchActionModal')"
+                    style="background:#9ca3af; margin-top:0.5rem;">Kapat</button>
+            </div>
+        </div>
+    </div>
+
     <!-- Shelf Modal -->
     <div id="shelfModal" class="modal-overlay"
         style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); z-index:1000; align-items:center; justify-content:center;">
@@ -2257,7 +2434,49 @@
         </div>
     </div>
 
-    <script src="js/app.js?v=12"></script>
+    <!-- Scanner Modal -->
+    <div id="scannerModal" class="modal-overlay"
+        style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.8); z-index:2000; align-items:center; justify-content:center;">
+        <div class="glass-card"
+            style="width: 90%; max-width: 500px; background: white; padding: 1rem; text-align: center;">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem;">
+                <h3 style="margin:0;">📷 Barkod / QR Tarayıcı</h3>
+                <button onclick="closeScanner()"
+                    style="background:none; border:none; font-size:1.5rem; cursor:pointer;">&times;</button>
+            </div>
+            <div id="reader" style="width:100%; min-height:300px;"></div>
+            <button class="btn-primary" style="background:#ef4444; margin-top:1rem;"
+                onclick="closeScanner()">Kapat</button>
+        </div>
+    </div>
+
+    <!-- External Script for QR Code / Barcode Scanning -->
+    <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
+
+    <!-- Maintenance Overlay -->
+    <div id="maintenanceOverlay"
+        style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(15, 23, 42, 0.95); z-index:99999; flex-direction:column; align-items:center; justify-content:center; color:white; text-align:center;">
+        <div class="loader-container" style="margin-bottom:2rem;">
+            <div class="loader"
+                style="width:60px; height:60px; border:5px solid rgba(255,255,255,0.1); border-top-color:var(--primary); border-radius:50%; animation:spin 1s linear infinite;">
+            </div>
+        </div>
+        <h2 style="font-size:2rem; margin-bottom:1rem;">Sistem Yeniden Başlatılıyor</h2>
+        <p style="font-size:1.1rem; color:#94a3b8; max-width:500px;">Lütfen bekleyin, güncellemeler uygulanıyor.
+            Uygulama hazır olduğunda otomatik olarak devam edeceksiniz.</p>
+        <div style="margin-top:2rem; font-family:monospace; color:var(--primary);" id="maintenanceTimer">Bağlantı
+            bekleniyor...</div>
+    </div>
+
+    <style>
+        @keyframes spin {
+            to {
+                transform: rotate(360deg);
+            }
+        }
+    </style>
+
+    <script src="js/app.js?v=26"></script>
     <script src="js/title_management.js?v=2"></script>
     <script>
         document.addEventListener('DOMContentLoaded', () => {

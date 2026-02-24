@@ -18,15 +18,15 @@ namespace S2O1.API.Controllers
         }
 
         [HttpGet]
-        [Filters.Permission("PriceList", "Read")]
-        public async Task<ActionResult<IEnumerable<PriceListDto>>> GetAll()
+        [Filters.Permission(new[] { "PriceList", "Offers" }, "Read")]
+        public async Task<ActionResult<IEnumerable<PriceListDto>>> GetAll([FromQuery] string? status = null)
         {
-            var data = await _priceListService.GetAllAsync();
+            var data = await _priceListService.GetAllAsync(status);
             return Ok(data);
         }
 
         [HttpGet("{id}")]
-        [Filters.Permission("PriceList", "Read")]
+        [Filters.Permission(new[] { "PriceList", "Offers" }, "Read")]
         public async Task<ActionResult<PriceListDto>> GetById(int id)
         {
             var result = await _priceListService.GetByIdAsync(id);

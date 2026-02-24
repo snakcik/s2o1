@@ -186,11 +186,13 @@ namespace S2O1.CLI.Flows
             
             ConsoleHelper.PrintInfo($"Selected: {server}");
             
-            // Determine if LocalDB or regular SQL Server
-            bool isLocalDb = server.ToLower().Contains("localdb");
+            // Determine Authentication Type
+            var authOptions = new List<string> { "Windows Authentication (Integrated Security)", "SQL Server Authentication (Username/Password)" };
+            int authSelection = MenuHelper.ShowMenu("Select Authentication Type:", authOptions);
+            
             string connStr;
             
-            if (isLocalDb)
+            if (authSelection == 0)
             {
                 connStr = $"Server={server};Database=2S1O;Integrated Security=true;TrustServerCertificate=True;";
                 ConsoleHelper.PrintInfo("Using Windows Authentication (Integrated Security)");
@@ -218,6 +220,7 @@ namespace S2O1.CLI.Flows
             {
                 var services = new ServiceCollection();
                 services.AddScoped<IPasswordHasher, PasswordHasher>();
+                services.AddSingleton<S2O1.Core.Interfaces.ICurrentUserService, S2O1.CLI.Services.CliCurrentUser>();
                 services.AddDataAccess(connStr);
                 
                 var provider = services.BuildServiceProvider();
@@ -389,11 +392,13 @@ namespace S2O1.CLI.Flows
             
             ConsoleHelper.PrintInfo($"Selected: {server}");
             
-            // Determine if LocalDB or regular SQL Server
-            bool isLocalDb = server.ToLower().Contains("localdb");
+            // Determine Authentication Type
+            var authOptions = new List<string> { "Windows Authentication (Integrated Security)", "SQL Server Authentication (Username/Password)" };
+            int authSelection = MenuHelper.ShowMenu("Select Authentication Type:", authOptions);
+            
             string connStr;
             
-            if (isLocalDb)
+            if (authSelection == 0)
             {
                 connStr = $"Server={server};Database=2S1O;Integrated Security=true;TrustServerCertificate=True;";
                 ConsoleHelper.PrintInfo("Using Windows Authentication (Integrated Security)");
@@ -421,6 +426,7 @@ namespace S2O1.CLI.Flows
             {
                 var services = new ServiceCollection();
                 services.AddScoped<IPasswordHasher, PasswordHasher>();
+                services.AddSingleton<S2O1.Core.Interfaces.ICurrentUserService, S2O1.CLI.Services.CliCurrentUser>();
                 services.AddDataAccess(connStr);
                 
                 var provider = services.BuildServiceProvider();

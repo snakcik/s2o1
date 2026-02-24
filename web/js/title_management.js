@@ -3,26 +3,40 @@
 // TITLE / DEPARTMENT MANAGEMENT
 // ============================================
 
-window.openTitleModal = async function () {
+window.openTitleModal = async function (id) {
     const modal = document.getElementById('titleModal');
     if (!modal) return;
 
     // Reset Form
     document.getElementById('tId').value = '';
     document.getElementById('tName').value = '';
+    const companySelect = document.getElementById('tCompany');
+    if (companySelect) companySelect.value = '';
 
     // Load Companies
-    const companySelect = document.getElementById('tCompany');
     if (companySelect) {
         companySelect.innerHTML = '<option value="">Yükleniyor...</option>';
         try {
-            const res = await fetch(`${API_BASE_URL}/api/companies`); // Use existing companies endpoint
+            const res = await fetch(`${API_BASE_URL}/api/companies`);
             if (res.ok) {
                 const companies = await res.json();
                 companySelect.innerHTML = '<option value="">Şirket Seçin...</option>';
                 companies.forEach(c => {
                     companySelect.innerHTML += `<option value="${c.id}">${c.companyName}</option>`;
                 });
+
+                // If editing, fetch single title
+                if (id) {
+                    try {
+                        const tRes = await fetch(`${API_BASE_URL}/api/users/titles/${id}`);
+                        if (tRes.ok) {
+                            const t = await tRes.json();
+                            document.getElementById('tId').value = t.id;
+                            document.getElementById('tName').value = t.titleName;
+                            document.getElementById('tCompany').value = t.companyId;
+                        }
+                    } catch (e) { console.error("Title load failed", e); }
+                }
             } else {
                 companySelect.innerHTML = '<option value="">Hata!</option>';
             }
@@ -51,26 +65,17 @@ window.saveTitle = async function () {
     };
 
     try {
-        const url = `${API_BASE_URL}/api/users/titles`;
-        // Currently only create is supported by backend per my implementation plan (CreateTitleDto)
-        // If update needed, need to implement UpdateTitle in backend. Assuming Create for now or handled.
-        // Wait, did I implement Update in backend?
-        // I checked ServiceInterfaces.cs, only CreateTitleAsync and DeleteTitleAsync.
-        // So I will only support Create for now or check if ID exists and warn.
-
-        if (id) {
-            alert('Ünvan güncelleme henüz desteklenmemektedir. Lütfen silip yeniden oluşturunuz.');
-            return;
-        }
+        const url = id ? `${API_BASE_URL}/api/users/titles/${id}` : `${API_BASE_URL}/api/users/titles`;
+        const method = id ? 'PUT' : 'POST';
 
         const res = await fetch(url, {
-            method: 'POST',
+            method: method,
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(payload)
         });
 
         if (res.ok) {
-            alert('Ünvan/Bölüm başarıyla kaydedildi.');
+            alert(id ? 'Ünvan başarıyla güncellendi.' : 'Ünvan/Bölüm başarıyla kaydedildi.');
             closeModal('titleModal');
             loadTitles(); // Refresh list
         } else {
@@ -89,10 +94,6 @@ window.loadTitles = async function () {
     tbody.innerHTML = '<tr><td colspan="3" style="text-align:center;">Yükleniyor...</td></tr>';
 
     try {
-        // We need titles with company info? The DTO has CompanyId.
-        // We might need to fetch companies to map names if DTO doesn't have CompanyName.
-        // DTO: { Id, TitleName, CompanyId }
-
         const [titlesRes, companiesRes] = await Promise.all([
             fetch(`${API_BASE_URL}/api/users/titles`),
             fetch(`${API_BASE_URL}/api/companies`)
@@ -118,7 +119,8 @@ window.loadTitles = async function () {
                         <td>${companyName}</td>
                         <td style="text-align:right;">
                             <div class="action-btn-container">
-                                <button class="btn-action btn-edit" onclick="openTitlePermissionsModal(${t.id}, '${t.titleName}')">🔑 Yetkiler</button>
+                                <button class="btn-action btn-edit" onclick="openTitleModal(${t.id})">✏️ Düzenle</button>
+                                <button class="btn-action" style="background:var(--primary); color:white;" onclick="openTitlePermissionsModal(${t.id}, '${t.titleName}')">🔑 Yetkiler</button>
                                 <button class="btn-action btn-delete" onclick="deleteTitle(${t.id})">🗑️ Sil</button>
                             </div>
                         </td>
@@ -254,13 +256,3 @@ window.saveTitlePermissions = async function () {
         alert('Hata: ' + e.message);
     }
 }
-
-// Hook into switchView to load titles when view is 'titles' (we need to update switchView map)
-// We'll update switchView via replace_file_content or just rely on 'users' view loading titles?
-// The user asked for a separate section/page.
-// In dashboard.html I added onclick="switchView('titles')".
-// So I need to handle 'titles' in switchView.
-
-// Hook into loadUsers to populate titles in userModal?
-// No, openModal() is called for user creation. I need to override/extend openModal.
-

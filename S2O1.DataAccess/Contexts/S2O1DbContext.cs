@@ -30,6 +30,7 @@ namespace S2O1.DataAccess.Contexts
         public DbSet<SystemSetting> SystemSettings { get; set; }
         public DbSet<LicenseInfo> LicenseInfos { get; set; }
         public DbSet<AuditLog> AuditLogs { get; set; }
+        public DbSet<SystemQueueTask> SystemQueueTasks { get; set; }
 
         // Organization
         public DbSet<Company> Companies { get; set; }
@@ -193,23 +194,39 @@ namespace S2O1.DataAccess.Contexts
                 auditEntryPairs.Add((entry, audit));
             }
 
-             var result = await base.SaveChangesAsync(cancellationToken);
-
-             if (auditEntryPairs.Any())
+             try
              {
-                 foreach (var pair in auditEntryPairs)
+                 var result = await base.SaveChangesAsync(cancellationToken);
+
+                 if (auditEntryPairs.Any())
                  {
-                     // Update ID if it was 0 (Added)
-                     if (pair.Log.ActionType == "Added")
+                     foreach (var pair in auditEntryPairs)
                      {
-                         pair.Log.EntityId = pair.Entry.Entity.GetType().GetProperty("Id")?.GetValue(pair.Entry.Entity)?.ToString() ?? pair.Log.EntityId;
+                         if (pair.Log.ActionType == "Added")
+                         {
+                             pair.Log.EntityId = pair.Entry.Entity.GetType().GetProperty("Id")?.GetValue(pair.Entry.Entity)?.ToString() ?? pair.Log.EntityId;
+                         }
+                         AuditLogs.Add(pair.Log);
                      }
-                     AuditLogs.Add(pair.Log);
+                     try
+                     {
+                         await base.SaveChangesAsync(cancellationToken);
+                     }
+                     catch (System.Exception auditEx)
+                     {
+                         Console.WriteLine($"[AUDIT-WARN] Audit log kayıt hatası: {auditEx.InnerException?.Message ?? auditEx.Message}");
+                     }
                  }
-                 await base.SaveChangesAsync(cancellationToken);
+
+                 return result;
              }
-             
-            return result;
+             catch (Microsoft.EntityFrameworkCore.DbUpdateException dbEx)
+             {
+                 // Unwrap to innermost exception for clearest error message
+                 System.Exception inner = dbEx;
+                 while (inner.InnerException != null) inner = inner.InnerException;
+                 throw new System.Exception(inner.Message, dbEx);
+             }
         }
         private string? GetEntityDisplayName(BaseEntity entity)
         {

@@ -133,28 +133,21 @@ namespace S2O1.DataAccess.Persistence
 
         private async Task SeedModulesAsync(IEnumerable<Assembly> assemblies)
         {
-            // Scan for Entities (BaseEntity) to define Modules
-            var entityNames = assemblies.SelectMany(a => a.GetTypes())
-                .Where(t => typeof(S2O1.Domain.Common.BaseEntity).IsAssignableFrom(t) && !t.IsAbstract)
-                .Select(t => t.Name)
-                .ToList();
-
-            // Add Static / Special Modules
-            var staticModules = new List<string>
+            // FIXED WHITELIST: Only modules that map to actual API permission checks.
+            // Avoids duplicates like Offer/Offers, Invoice/Invoices caused by entity scanning.
+            var allModuleNames = new List<string>
             {
-                "Reports", "Stock", "Sales", "Warehouse" // Business logical areas
-            };
-
-            // Maintain compatibility with existing controller-based naming where it differs
-            var legacyModules = new List<string>
-            {
-                "Users", "Companies", "Invoices", "Offers", "System", "Logs" // Controller-based names
-            };
-
-            var allModuleNames = staticModules
-                .Union(entityNames)
-                .Union(legacyModules)
-                .Distinct();
+                // Core business modules (match controller Permission attributes exactly)
+                "Warehouse", "WarehouseManagement",
+                "Stock", "Sales",
+                "Product", "Category", "Brand",
+                "Supplier", "Customer",
+                "Offers", "Invoices",
+                "PriceList",
+                // System modules
+                "Users", "Companies", "System", "Logs", "Reports",
+                "Auth"
+            }.Distinct();
 
             using var transaction = await _context.Database.BeginTransactionAsync();
             try

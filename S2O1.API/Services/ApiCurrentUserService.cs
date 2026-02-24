@@ -66,5 +66,6 @@ namespace S2O1.API.Services
         public string IpAddress => _httpContextAccessor.HttpContext?.Connection?.RemoteIpAddress?.ToString() ?? string.Empty;
 
         public string Source => "API";
+        public bool IsRoot => UserId == 1;
     }
 }

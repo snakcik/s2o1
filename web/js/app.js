@@ -1,10 +1,75 @@
 // Automatically use the current host (works for localhost and network IP)
 const API_BASE_URL = window.location.origin;
 
+window.debounce = function (func, wait) {
+    let timeout;
+    return function executedFunction(...args) {
+        const later = () => {
+            clearTimeout(timeout);
+            func(...args);
+        };
+        clearTimeout(timeout);
+        timeout = setTimeout(later, wait);
+    };
+};
+
 window.formatMoney = function (val) {
     if (val === undefined || val === null || isNaN(val)) return '0,00';
     return parseFloat(val).toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 };
+
+window.showToast = function (message, type = 'success') {
+    const container = document.getElementById('toastContainer');
+    if (!container) return;
+
+    const toast = document.createElement('div');
+    toast.className = `toast-notification ${type}`;
+
+    let icon = '🔔';
+    if (type === 'success') icon = '✅';
+    if (type === 'error') icon = '❌';
+    if (type === 'warning') icon = '⚠️';
+
+    toast.innerHTML = `<span style="font-size:1.2rem;">${icon}</span> <span>${message}</span>`;
+    container.appendChild(toast);
+
+    // Auto remove
+    setTimeout(() => {
+        toast.classList.add('fade-out');
+        setTimeout(() => toast.remove(), 500);
+    }, 4000);
+};
+
+window.restoreEntity = async function (type, id) {
+    if (!(await showConfirm('Geri Yükle', 'Bu öğeyi tekrar aktif hale getirmek istediğinize emin misiniz?'))) return;
+    try {
+        const res = await fetch(`${API_BASE_URL}/api/system/restore/${type}/${id}`, {
+            method: 'POST'
+        });
+        if (res.ok) {
+            showToast('Öğe başarıyla geri yüklendi');
+            // Refresh current view based on type
+            const t = type.toLowerCase();
+            if (t === 'product') loadProducts();
+            else if (t === 'warehouse') loadWarehouses();
+            else if (t === 'brand') loadBrands();
+            else if (t === 'category') loadCategories();
+            else if (t === 'unit') loadUnits();
+            else if (t === 'supplier') loadSuppliers();
+            else if (t === 'customercompany') loadCompanies();
+            else if (t === 'customer') loadCustomers();
+            else if (t === 'offer') loadOffers();
+            else if (t === 'invoice') loadInvoices();
+            else if (t === 'user') loadUsers();
+            else if (t === 'company') loadCompanies();
+        } else {
+            const err = await res.text();
+            showToast('Geri yükleme başarısız: ' + err, 'error');
+        }
+    } catch (e) {
+        showToast('Hata: ' + e.message, 'error');
+    }
+}
 
 // Intercept all fetch requests to add user headers
 const originalFetch = window.fetch;
@@ -17,20 +82,41 @@ window.fetch = async function (input, init) {
         try {
             const user = JSON.parse(userJson);
 
+            // Helper to sanitize header values (Browser fetch fails with non-ISO-8859-1 chars like 'ı')
+            const safeValue = (val) => {
+                if (!val) return "";
+                let s = String(val);
+                const map = {
+                    'ğ': 'g', 'Ğ': 'G',
+                    'ü': 'u', 'Ü': 'U',
+                    'ş': 's', 'Ş': 'S',
+                    'ı': 'i', 'İ': 'I',
+                    'ö': 'o', 'Ö': 'O',
+                    'ç': 'c', 'Ç': 'C'
+                };
+                Object.keys(map).forEach(key => {
+                    s = s.replace(new RegExp(key, 'g'), map[key]);
+                });
+                // Final fallback: remove anything still non-ASCII to prevent fetch crash
+                return s.replace(/[^\x00-\x7F]/g, "");
+            };
+
+            const userId = String(user.id);
+            const userName = safeValue(user.userName);
+            const userRole = safeValue(user.role);
+
             if (init.headers instanceof Headers) {
-                init.headers.append('X-User-Id', user.id);
-                init.headers.append('X-User-Name', user.userName);
-                init.headers.append('X-User-Role', user.role);
+                init.headers.append('X-User-Id', userId);
+                init.headers.append('X-User-Name', userName);
+                init.headers.append('X-User-Role', userRole);
             } else if (Array.isArray(init.headers)) {
-                // If headers is array of arrays
-                init.headers.push(['X-User-Id', String(user.id)]);
-                init.headers.push(['X-User-Name', user.userName]);
-                init.headers.push(['X-User-Role', user.role]);
+                init.headers.push(['X-User-Id', userId]);
+                init.headers.push(['X-User-Name', userName]);
+                init.headers.push(['X-User-Role', userRole]);
             } else {
-                // Plain object
-                init.headers['X-User-Id'] = String(user.id);
-                init.headers['X-User-Name'] = String(user.userName);
-                init.headers['X-User-Role'] = String(user.role);
+                init.headers['X-User-Id'] = userId;
+                init.headers['X-User-Name'] = userName;
+                init.headers['X-User-Role'] = userRole;
             }
         } catch (e) {
             console.error("Auth header injection failed", e);
@@ -48,6 +134,19 @@ document.addEventListener('DOMContentLoaded', () => {
     if (window.location.pathname.includes('dashboard.html')) {
         checkAuth();
         loadDashboard();
+
+        // Restore last view
+        const lastView = localStorage.getItem('lastView') || 'dashboard';
+        const lastTab = localStorage.getItem('lastTab');
+        if (lastView) {
+            window.switchView(lastView, lastTab);
+        }
+
+        // Check if we were in the middle of a restart
+        if (localStorage.getItem('isRestarting') === 'true') {
+            localStorage.removeItem('isRestarting');
+            showToast("Sistem geri geldi.", "success");
+        }
 
         document.querySelectorAll('.menu-item').forEach(item => {
             item.addEventListener('click', (e) => {
@@ -68,6 +167,21 @@ document.addEventListener('DOMContentLoaded', () => {
         });
 
         loadSystemInfo(true);
+
+        const invSearchInput = document.getElementById('inventorySearchInput');
+        if (invSearchInput) {
+            invSearchInput.addEventListener('input', window.debounce(() => {
+                const activeTabBtn = document.querySelector('.tab-inv-btn.active');
+                if (!activeTabBtn) return;
+                const tabName = activeTabBtn.getAttribute('data-tab');
+
+                if (tabName === 'products') loadProducts();
+                else if (tabName === 'warehouses') loadWarehouses();
+                else if (tabName === 'brands') loadBrands();
+                else if (tabName === 'categories') loadCategories();
+                else if (tabName === 'units') loadUnits();
+            }, 500));
+        }
     }
 });
 
@@ -161,7 +275,7 @@ window.requestReset = async function () {
     const msg = document.getElementById('forgotMsg');
     const btn = document.getElementById('resetBtn');
 
-    if (!email) return alert('Lütfen e-posta adresinizi girin.');
+    if (!email) return showToast('Lütfen e-posta adresinizi girin.', 'warning');
 
     try {
         btn.disabled = true;
@@ -373,8 +487,67 @@ window.showConfirm = function (title, message, yesText = 'Evet, Sil', noText = '
     });
 };
 
+window.currentStatusFilter = {};
+
+window.renderStatusFilter = function (sectionName, containerId, callback) {
+    const container = document.getElementById(containerId);
+    if (!container) return;
+
+    if (!window.hasPermission('ShowDeletedItems', 'read')) {
+        container.style.display = 'none';
+        container.innerHTML = '';
+        return;
+    }
+
+    const current = window.currentStatusFilter[sectionName] || 'active';
+    // Ensure we have a string name for the callback
+    const callbackName = typeof callback === 'function' ? (callback.name || "") : callback;
+
+    container.style.display = 'flex';
+    container.innerHTML = `
+        <div class="status-filter-container">
+            <span>💾 Veri Filtresi:</span>
+            <div class="status-options">
+                <button class="status-btn ${current === 'active' ? 'active' : ''}" onclick="window.setStatusFilter('${sectionName}', 'active', '${containerId}', '${callbackName}')">Aktif</button>
+                <button class="status-btn ${current === 'passive' ? 'active' : ''}" onclick="window.setStatusFilter('${sectionName}', 'passive', '${containerId}', '${callbackName}')">Pasif (Silinenler)</button>
+                <button class="status-btn ${current === 'all' ? 'active' : ''}" onclick="window.setStatusFilter('${sectionName}', 'all', '${containerId}', '${callbackName}')">Tümü</button>
+            </div>
+        </div>
+    `;
+};
+
+window.setStatusFilter = function (section, status, containerId, callback) {
+    window.currentStatusFilter[section] = status;
+    // Re-render filter to show active state
+    window.renderStatusFilter(section, containerId, callback);
+    // Execute data reload
+    const callbackFunc = typeof callback === 'string' ? window[callback] : callback;
+    if (callbackFunc) callbackFunc();
+};
+
 window.switchView = function (viewName, defaultTab) {
+    localStorage.setItem('lastView', viewName);
+    if (defaultTab) localStorage.setItem('lastTab', defaultTab);
+
     const currentUser = JSON.parse(localStorage.getItem('user'));
+
+    // Render Status Filter for specific sections if user has permission
+    const filterMap = {
+        'users': { container: 'filter-container-users', callback: 'loadUsers' },
+        'inventory': { container: 'filter-container-inventory', callback: 'loadProducts' },
+        'warehouses': { container: 'filter-container-inventory', callback: 'loadWarehouses' },
+        'companies': { container: 'filter-container-companies', callback: 'loadCompanies' },
+        'shelves': { container: 'filter-container-shelves', callback: 'loadShelves' },
+        'offers': { container: 'filter-container-offers', callback: 'loadOffers' },
+        'invoices': { container: 'filter-container-invoices', callback: 'loadInvoices' },
+        'customers': { container: 'filter-container-customers', callback: 'loadCustomers' },
+        'suppliers': { container: 'filter-container-suppliers', callback: 'loadSuppliers' },
+        'customer-companies': { container: 'filter-container-customer-companies', callback: 'loadCustomerCompanies' }
+    };
+
+    if (filterMap[viewName]) {
+        window.renderStatusFilter(viewName, filterMap[viewName].container, filterMap[viewName].callback);
+    }
 
     // Permission enforcement based on data-module attribute of the menu item
     const menuItem = document.querySelector(`.menu-item[onclick*="switchView('${viewName}')"]`);
@@ -535,17 +708,32 @@ window.updateFileLabel = function (input) {
 
 window.loadWaybillHistoryView = async function () {
     const sSel = document.getElementById('whSupplier');
+    const typeSel = document.getElementById('whType');
     if (!sSel) return;
 
     sSel.innerHTML = '<option value="">Yükleniyor...</option>';
     try {
-        const res = await fetch(`${API_BASE_URL}/api/supplier`);
-        const suppliers = await res.json();
+        const type = typeSel ? typeSel.value : 'Gelen';
+        let items = [];
+
+        if (type === 'Giden') {
+            const res = await fetch(`${API_BASE_URL}/api/customer/companies`);
+            if (res.ok) items = await res.json();
+        } else {
+            const res = await fetch(`${API_BASE_URL}/api/supplier`);
+            if (res.ok) items = await res.json();
+        }
 
         sSel.innerHTML = '<option value="">Tümü</option>';
-        suppliers.forEach(s => {
-            sSel.innerHTML += `<option value="${s.id}">${s.supplierCompanyName}</option>`;
-        });
+        if (type === 'Giden') {
+            items.forEach(c => {
+                sSel.innerHTML += `<option value="${c.id}">${c.customerCompanyName}</option>`;
+            });
+        } else {
+            items.forEach(s => {
+                sSel.innerHTML += `<option value="${s.id}">${s.supplierCompanyName}</option>`;
+            });
+        }
 
         // Initialize view with all records
         runWaybillHistorySearch();
@@ -576,6 +764,7 @@ window.loadSupplierWaybills = async function (supplierId, source = 'se', extraFi
             if (extraFilters.waybillNo) params.append('waybillNo', extraFilters.waybillNo);
             if (extraFilters.startDate) params.append('startDate', extraFilters.startDate);
             if (extraFilters.endDate) params.append('endDate', extraFilters.endDate);
+            if (extraFilters.type) params.append('type', extraFilters.type);
             url = `${API_BASE_URL}/api/stock/waybills/search?${params.toString()}`;
         }
 
@@ -590,27 +779,33 @@ window.loadSupplierWaybills = async function (supplierId, source = 'se', extraFi
         body.innerHTML = '';
         waybills.forEach(w => {
             const dateStr = new Date(w.date).toLocaleDateString('tr-TR');
-            const docLink = w.documentPath ?
-                `<a href="${API_BASE_URL}${w.documentPath}" target="_blank" class="status-badge status-success" style="text-decoration:none;">📄 Görüntüle</a>` :
-                '<span class="status-badge" style="background:#f1f5f9; color:#94a3b8;">Belge Yok</span>';
+            if (w.documentPath) {
+                docLink = `<a href="${API_BASE_URL}${w.documentPath}" target="_blank" class="status-badge status-success" style="text-decoration:none;" onclick="event.stopPropagation()">📄 Görüntüle</a>`;
+            } else {
+                docLink = '<span class="status-badge" style="background:#f1f5f9; color:#94a3b8;">Belge Yok</span>';
+            }
+
+            if (isWaybillHistory && extraFilters.type === 'Giden') {
+                docLink = `<button onclick="event.stopPropagation(); downloadWaybillPdf('${w.waybillNo}')" class="btn-action" style="background:#8b5cf6;">💾 PDF İndir</button>`;
+            }
 
             if (isWaybillHistory) {
                 body.innerHTML += `
-                    <tr>
-                        <td style="font-weight:700; color:#1e293b; padding:1.2rem 1rem;">
+                    <tr onclick="toggleWaybillDetails('${w.waybillNo}', this)" style="cursor:pointer; transition:background 0.2s;">
+                        <td style="font-weight:700; color:#1e293b;">
                             <span style="color:var(--primary);">${w.waybillNo}</span>
                         </td>
-                        <td style="padding:1.2rem 1rem;">
+                        <td>
                             <div style="font-weight:600; color:#475569;">${w.supplierName}</div>
                             <small style="color:#94a3b8;">${w.description || 'Genel Giriş'}</small>
                         </td>
-                        <td style="font-size:0.9rem; color:#64748b; padding:1.2rem 1rem;">
+                        <td style="font-size:0.9rem; color:#64748b;">
                             ${dateStr}
                         </td>
-                        <td style="padding:1.2rem 1rem;">
-                            <span class="qty-badge" style="font-size:1rem; padding: 0.4rem 0.8rem;">${w.totalQuantity}</span>
+                        <td>
+                            <span class="qty-badge" style="font-size:0.9rem;">${w.totalQuantity}</span>
                         </td>
-                        <td style="padding:1.2rem 1rem;">
+                        <td style="text-align:right;">
                             ${docLink}
                         </td>
                     </tr>
@@ -632,13 +827,77 @@ window.loadSupplierWaybills = async function (supplierId, source = 'se', extraFi
     }
 }
 
+window.downloadWaybillPdf = async function (waybillNo) {
+    const loadingMsg = document.createElement('div');
+    loadingMsg.id = 'tempLoadingMsg';
+    loadingMsg.style = 'position:fixed; top:20px; right:20px; background:var(--primary); color:white; padding:1rem 1.5rem; border-radius:8px; z-index:9999; box-shadow:0 4px 16px rgba(0,0,0,0.15); font-weight:600;';
+    loadingMsg.innerText = '📄 PDF oluşturuluyor...';
+    document.body.appendChild(loadingMsg);
+
+    try {
+        const res = await fetch(`${API_BASE_URL}/api/invoice/by-number/${encodeURIComponent(waybillNo)}`);
+        if (!res.ok) throw new Error('İrsaliye verisi alınamadı');
+        const invoice = await res.json();
+
+        const buyerName = invoice.buyerCompanyName || invoice.receiverName || 'Bilinmiyor';
+        const buyerAddress = invoice.buyerCompanyAddress || '';
+        const buyerTax = invoice.buyerCompanyTaxInfo || '';
+
+        const html = generateDispatchHtmlFromData(
+            invoice.items || [],
+            buyerName,
+            buyerAddress,
+            window.systemInfo,
+            {
+                invoiceNumber: invoice.invoiceNumber,
+                date: invoice.issueDate ? new Date(invoice.issueDate).toLocaleDateString('tr-TR') : new Date().toLocaleDateString('tr-TR'),
+                dueDate: invoice.dueDate ? new Date(invoice.dueDate).toLocaleDateString('tr-TR') : '',
+                grandTotal: invoice.grandTotal || 0,
+                assignedUser: invoice.assignedDelivererUserName || '',
+                receiverName: invoice.receiverName || '',
+                buyerCompanyTaxInfo: buyerTax
+            }
+        );
+
+        const printWindow = window.open('', '_blank');
+        printWindow.document.write(html);
+        printWindow.document.close();
+
+        printWindow.onload = () => {
+            const pdfScript = printWindow.document.createElement('script');
+            pdfScript.src = 'https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js';
+            pdfScript.onload = () => {
+                const opt = {
+                    margin: 0,
+                    filename: `sevk_irsaliyesi_${invoice.invoiceNumber}.pdf`,
+                    image: { type: 'jpeg', quality: 0.98 },
+                    html2canvas: { scale: 2 },
+                    jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
+                };
+                printWindow.html2pdf().set(opt).from(printWindow.document.body).save().then(() => {
+                    setTimeout(() => printWindow.close(), 800);
+                });
+            };
+            printWindow.document.head.appendChild(pdfScript);
+        };
+    } catch (e) {
+        alert('Hata: ' + e.message);
+        console.error(e);
+    } finally {
+        const msg = document.getElementById('tempLoadingMsg');
+        if (msg) document.body.removeChild(msg);
+    }
+}
+
 window.runWaybillHistorySearch = function () {
     const sId = document.getElementById('whSupplier').value;
     const waybillNo = document.getElementById('whDocNo').value;
     const startDate = document.getElementById('whStartDate').value;
     const endDate = document.getElementById('whEndDate').value;
+    const typeEle = document.getElementById('whType');
+    const type = typeEle ? typeEle.value : 'Gelen';
 
-    loadSupplierWaybills(sId, 'wh', { waybillNo, startDate, endDate });
+    loadSupplierWaybills(sId, 'wh', { waybillNo, startDate, endDate, type });
 }
 
 window.submitStockEntry = async function () {
@@ -723,10 +982,13 @@ window.initReportsView = async function () {
 
 window.loadStockReport = async function () {
     const warehouseId = document.getElementById('reportWarehouseFilter').value;
+    const codeFilter = document.getElementById('reportProductCodeFilter').value.toLowerCase();
+    const nameFilter = document.getElementById('reportProductNameFilter').value.toLowerCase();
+
     const tbody = document.getElementById('reportListBody');
     if (!tbody) return;
 
-    tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;">Yükleniyor...</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;">Yükleniyor...</td></tr>';
 
     try {
         let url = `${API_BASE_URL}/api/stock/report`;
@@ -734,53 +996,170 @@ window.loadStockReport = async function () {
 
         const res = await fetch(url);
         if (res.status === 403) {
-            tbody.innerHTML = '<tr><td colspan="5" style="color:var(--error); text-align:center;">🚫 Yetkisiz Erişim</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="9" style="color:var(--error); text-align:center;">🚫 Yetkisiz Erişim</td></tr>';
             return;
         }
         if (!res.ok) {
             const text = await res.text();
             throw new Error(`Sunucu Hatası (${res.status}): ${text || res.statusText}`);
         }
-        const data = await res.json();
+
+        let data = await res.json();
+
+        // Client-side filtering for Code and Name
+        if (codeFilter) {
+            data = data.filter(item => item.productCode && item.productCode.toLowerCase().includes(codeFilter));
+        }
+        if (nameFilter) {
+            data = data.filter(item => item.productName && item.productName.toLowerCase().includes(nameFilter));
+        }
 
         tbody.innerHTML = '';
         if (data.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;">Kayıt bulunamadı.</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;">Aradığınız kriterlere uygun kayıt bulunamadı.</td></tr>';
             return;
         }
 
         data.forEach(item => {
+            const realStyle = item.currentStock > 0 ? '#d1fae5;color:#065f46;' : '#fee2e2;color:#991b1b;';
+            const resvStyle = item.reservedStock > 0 ? '#fef3c7;color:#92400e;' : '#f1f5f9;color:#64748b;';
+            const waitStyle = item.waitingInWarehouseStock > 0 ? '#dbeafe;color:#1e40af;' : '#f1f5f9;color:#64748b;';
+            const availStyle = item.availableStock > 0 ? '#dcfce3;color:#166534;' : '#fee2e2;color:#991b1b;';
+
             tbody.innerHTML += `
                 <tr>
                     <td>${item.warehouseName}</td>
                     <td><b>${item.productCode}</b></td>
                     <td>${item.productName}</td>
-                    <td><span class="badge" style="background:${item.currentStock > 0 ? '#d1fae5;color:#065f46;' : '#fee2e2;color:#991b1b;'}">${item.currentStock}</span></td>
+                    <td style="text-align:center;"><span class="badge" style="background:${realStyle}">${item.currentStock}</span></td>
+                    <td style="text-align:center;"><span class="badge" style="background:${resvStyle}">${item.reservedStock}</span></td>
+                    <td style="text-align:center;"><span class="badge" style="background:${waitStyle}">${item.waitingInWarehouseStock}</span></td>
+                    <td style="text-align:center;"><span class="badge" style="background:${availStyle}">${item.availableStock}</span></td>
                     <td>${item.unitName}</td>
                 </tr>
             `;
         });
     } catch (e) {
-        tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:red;">Hata: ' + e.message + '</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;color:red;">Hata: ' + e.message + '</td></tr>';
     }
 }
 
-async function loadSystemInfo(isShort = false) {
+window.loadSystemInfo = async function () {
+    const currentUser = JSON.parse(localStorage.getItem('user'));
+
     try {
         const res = await fetch(`${API_BASE_URL}/api/system/info`);
-        const data = await res.json();
-        if (isShort) {
-            const el = document.getElementById('dashboardSysInfo');
-            if (el) el.innerHTML = `Veritabanı: <strong>${data.databaseStatus}</strong><br>Versiyon: ${data.appVersion}`;
-        } else {
-            document.getElementById('sysDbStatus').innerText = data.databaseStatus;
-            document.getElementById('sysVersion').innerText = data.appVersion;
-            document.getElementById('sysRuntime').innerText = data.runtime;
-            document.getElementById('sysOS').innerText = data.os;
-            document.getElementById('sysEnv').innerText = data.environment;
-            document.getElementById('sysTime').innerText = data.serverTime;
+        if (res.ok) {
+            const info = await res.json();
+            document.getElementById('sysDbStatus').innerText = info.databaseStatus;
+            document.getElementById('sysVersion').innerText = info.appVersion;
+            document.getElementById('sysServerTime').innerText = new Date(info.serverTime).toLocaleString('tr-TR');
+            document.getElementById('sysRuntime').innerText = info.runtime;
+            document.getElementById('sysOS').innerText = info.os;
+
+            // Fill Restart Time
+            if (info.restartTime && document.getElementById('systemRestartTime')) {
+                document.getElementById('systemRestartTime').value = info.restartTime;
+            }
         }
-    } catch (e) { console.error(e); }
+    } catch (e) {
+        console.error("System info error:", e);
+    }
+
+    if (currentUser && currentUser.id === 1) {
+        const emailCard = document.getElementById('mailSettingsCard');
+        if (emailCard) emailCard.style.display = 'block';
+
+        const dbCard = document.getElementById('dbSettingsCard');
+        if (dbCard) dbCard.style.display = 'block';
+
+        const restartCard = document.getElementById('restartSettingsCard');
+        if (restartCard) restartCard.style.display = 'block';
+
+        window.loadMailSettings();
+        window.loadSettings();
+    }
+};
+
+window.saveSystemSettings = async function () {
+    const restartTime = document.getElementById('systemRestartTime').value;
+    const forcePwd = document.getElementById('forceStrongPwd')?.checked || false;
+    const barcodeType = document.getElementById('barcodeType')?.value || 'QR';
+
+    try {
+        const res = await fetch(`${API_BASE_URL}/api/system/settings`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ forceStrongPassword: forcePwd, barcodeType: barcodeType, restartTime: restartTime })
+        });
+
+        if (res.ok) {
+            showToast("Sistem ayarları kaydedildi.");
+        } else {
+            showToast("Ayarlar kaydedilemedi.", "error");
+        }
+    } catch (e) {
+        showToast("Bağlantı hatası.", "error");
+    }
+};
+
+window.triggerRestart = async function () {
+    if (!confirm("Sistem yeniden başlatılacak. Devam etmek istiyor musunuz?")) return;
+
+    try {
+        localStorage.setItem('isRestarting', 'true');
+        showRestartOverlay();
+        const res = await fetch(`${API_BASE_URL}/api/system/restart`, { method: 'POST' });
+        if (!res.ok) {
+            hideRestartOverlay();
+            showToast("Restart başlatılamadı.", "error");
+        } else {
+            // Polling is started by showRestartOverlay
+        }
+    } catch (e) {
+        console.error(e);
+        // During restart, a connection error is expected
+    }
+};
+
+function showRestartOverlay() {
+    const overlay = document.getElementById('maintenanceOverlay');
+    if (overlay) {
+        overlay.style.display = 'flex';
+        pollSystemHealth();
+    }
+}
+
+function hideRestartOverlay() {
+    const overlay = document.getElementById('maintenanceOverlay');
+    if (overlay) overlay.style.display = 'none';
+}
+
+async function pollSystemHealth() {
+    const timerEl = document.getElementById('maintenanceTimer');
+    let attempts = 0;
+
+    const interval = setInterval(async () => {
+        attempts++;
+        if (timerEl) timerEl.innerText = `Bağlantı deneniyor... (${attempts})`;
+
+        try {
+            const res = await fetch(`${API_BASE_URL}/api/system/health`);
+            if (res.ok) {
+                clearInterval(interval);
+                if (timerEl) timerEl.innerText = "Bağlantı kuruldu! Yönlendiriliyorsunuz...";
+                setTimeout(() => {
+                    hideRestartOverlay();
+                    const lastView = localStorage.getItem('lastView') || 'dashboard';
+                    const lastTab = localStorage.getItem('lastTab');
+                    window.switchView(lastView, lastTab);
+                    showToast("Sistem başarıyla yeniden başlatıldı.", "success");
+                }, 1000);
+            }
+        } catch (e) {
+            // Still down
+        }
+    }, 3000);
 }
 
 async function loadLogs() {
@@ -936,7 +1315,7 @@ function getActionColor(action) {
     return '#6b7280'; // Gray
 }
 
-async function loadUsers() {
+window.loadUsers = async function () {
     const tbody = document.getElementById('userListBody');
     if (!tbody) return;
 
@@ -948,14 +1327,15 @@ async function loadUsers() {
         return;
     }
 
-    tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;">Yükleniyor...</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;">Yükleniyor...</td></tr>';
 
     try {
-        let url = `${API_BASE_URL}/api/users`;
+        const filter = window.currentStatusFilter['users'] || 'active';
+        let url = `${API_BASE_URL}/api/users?status=${filter}`;
 
         // Root sees all users, Admin sees only users they created
         if (currentUser.role === 'Admin') {
-            url += `?creatorId=${currentUser.id}`;
+            url += `&creatorId=${currentUser.id}`;
         }
         // Root role doesn't add creatorId parameter, so sees all users
 
@@ -964,13 +1344,13 @@ async function loadUsers() {
             tbody.innerHTML = '<tr><td colspan="5" style="color:var(--error); text-align:center;">🚫 Bu verileri görmeye yetkiniz bulunmamaktadır.</td></tr>';
             return;
         }
-        if (!res.ok) throw new Error('Yükleme hatas');
+        if (!res.ok) throw new Error('Yükleme hatası');
 
         const users = await res.json();
 
         tbody.innerHTML = '';
         if (users.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;">Kullanıcı bulunamadı.</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;">Kullanıcı bulunamadı.</td></tr>';
             return;
         }
 
@@ -979,36 +1359,112 @@ async function loadUsers() {
 
         users.forEach(u => {
             const tr = document.createElement('tr');
+            if (u.isDeleted) tr.style.opacity = '0.6';
+
             tr.innerHTML = `
-                <td>${u.userName}</td>
+                <td>${u.userName} ${u.isDeleted ? '<span class="badge" style="background:#fecaca;color:#991b1b;font-size:0.65rem;">PASİF (SİLİNDİ)</span>' : ''}</td>
                 <td>${u.firstName} ${u.lastName}</td>
                 <td>${u.email}</td>
                 <td>${u.titleName || '-'}</td>
                 <td><span class="badge ${u.role === 'Admin' ? 'badge-primary' : 'badge-secondary'}">${u.role}</span></td>
                 <td style="text-align:right;">
                     <div class="action-btn-container">
-                        ${canWrite ? `
+                        ${canWrite && !u.isDeleted ? `
                         <button class="btn-action" style="background:#10b981;" 
                             onclick="openPermissionsModal(${u.id}, '${u.userName}')">Yetkiler</button>
                         <button class="btn-action btn-edit" 
-                            onclick="openModal(${u.id})">Düzenle</button>
+                            onclick="openUserModal(${u.id})">Düzenle</button>
                         ` : ''}
-                        ${canDelete ? `
+                        ${canDelete && !u.isDeleted ? `
                         <button class="btn-action btn-delete" 
                             onclick="deleteUser(${u.id}, '${u.userName}')">Sil</button>
                         ` : ''}
+                        ${u.isDeleted ? (window.hasPermission('ShowDeletedItems', 'write') ? `
+                            <button class="btn-action" style="background:#10b981;" 
+                                onclick="restoreEntity('user', ${u.id})">✅ Geri Yükle</button>
+                        ` : '<span style="font-size:0.75rem; color:var(--muted); font-style:italic;">Pasif</span>') : ''}
                     </div>
                 </td>
             `;
             tbody.appendChild(tr);
         });
     } catch (e) {
-        tbody.innerHTML = '<tr><td colspan="5" style="color:var(--error); text-align:center;">Kullanıcı listesi yüklenemedi!</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="6" style="color:var(--error); text-align:center;">Kullanıcı listesi yüklenemedi!</td></tr>';
         console.error(e);
     }
 }
 
-window.openModal = async function (id) {
+window.toggleWaybillDetails = async function (waybillNo, rowElement) {
+    const detailRowId = `details-${waybillNo.replace(/[^a-zA-Z0-9]/g, '-')}`;
+    let detailRow = document.getElementById(detailRowId);
+
+    if (detailRow) {
+        detailRow.style.display = detailRow.style.display === 'none' ? 'table-row' : 'none';
+        return;
+    }
+
+    // Create detail row
+    detailRow = document.createElement('tr');
+    detailRow.id = detailRowId;
+    detailRow.style.background = '#f8fafc';
+    detailRow.innerHTML = `<td colspan="5" style="padding:0;"><div style="padding:1rem; text-align:center; color:var(--muted);"><span class="spinner-small"></span> Yükleniyor...</div></td>`;
+    rowElement.parentNode.insertBefore(detailRow, rowElement.nextSibling);
+
+    try {
+        const res = await fetch(`${API_BASE_URL}/api/stock/waybill-items?waybillNo=${encodeURIComponent(waybillNo)}`);
+        if (!res.ok) {
+            const errText = await res.text();
+            let msg = 'Yüklenemedi';
+            try {
+                const errObj = JSON.parse(errText);
+                msg = errObj.message || msg;
+            } catch (e) { msg = errText || msg; }
+            throw new Error(msg);
+        }
+        const items = await res.json();
+
+        if (items.length === 0) {
+            detailRow.innerHTML = `<td colspan="5" style="padding:1rem; text-align:center; color:var(--muted);">İçerik bilgisi bulunamadı.</td>`;
+            return;
+        }
+
+        let html = `
+            <td colspan="5" style="padding: 1.5rem; background: #f8fafc; border-bottom: 2px solid #e2e8f0;">
+                <div style="background: white; border-radius: 8px; border: 1px solid #e5e7eb; overflow: hidden; box-shadow: 0 2px 4px rgba(0,0,0,0.05);">
+                    <table style="width:100%; border-collapse: collapse;">
+                        <thead style="background: #f1f5f9; border-bottom: 1px solid #e2e8f0;">
+                            <tr>
+                                <th style="padding: 10px 15px; text-align: left; font-size: 0.7rem; color: #64748b; text-transform: uppercase;">Ürün Kodu</th>
+                                <th style="padding: 10px 15px; text-align: left; font-size: 0.7rem; color: #64748b; text-transform: uppercase;">Ürün Adı</th>
+                                <th style="padding: 10px 15px; text-align: center; font-size: 0.7rem; color: #64748b; text-transform: uppercase;">Miktar</th>
+                                <th style="padding: 10px 15px; text-align: left; font-size: 0.7rem; color: #64748b; text-transform: uppercase;">Birim</th>
+                                <th style="padding: 10px 15px; text-align: left; font-size: 0.7rem; color: #64748b; text-transform: uppercase;">Açıklama</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+        `;
+
+        items.forEach(item => {
+            html += `
+                <tr style="border-bottom: 1px solid #f1f5f9;">
+                    <td style="padding: 10px 15px; font-size: 0.85rem; color: var(--primary); font-weight: 600;">${item.productCode}</td>
+                    <td style="padding: 10px 15px; font-size: 0.85rem; color: #334155;">${item.productName}</td>
+                    <td style="padding: 10px 15px; font-size: 0.85rem; color: #1e293b; text-align: center; font-weight: 700;">${item.quantity}</td>
+                    <td style="padding: 10px 15px; font-size: 0.85rem; color: #64748b;">${item.unitName}</td>
+                    <td style="padding: 10px 15px; font-size: 0.8rem; color: #94a3b8; font-style: italic;">${item.description || '-'}</td>
+                </tr>
+            `;
+        });
+
+        html += `</tbody></table></div></td>`;
+        detailRow.innerHTML = html;
+
+    } catch (e) {
+        detailRow.innerHTML = `<td colspan="5" style="padding:1rem; text-align:center; color:red;">Hata: ${e.message}</td>`;
+    }
+}
+
+window.openUserModal = async function (id) {
     if (typeof id === 'string') {
         const el = document.getElementById(id);
         if (el) el.style.display = 'flex';
@@ -1162,7 +1618,7 @@ window.openPermissionsModal = async function (userId, userName) {
     document.getElementById('permissionsModal').style.display = 'flex';
 
     const tbody = document.getElementById('permListBody');
-    tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;">Yükleniyor...</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;">Yükleniyor...</td></tr>';
 
     try {
         const res = await fetch(`${API_BASE_URL}/api/users/${userId}/permissions`);
@@ -1175,7 +1631,7 @@ window.openPermissionsModal = async function (userId, userName) {
             'Stok Yönetimi': ['Product', 'Category', 'Stock', 'Warehouse', 'Upload', 'Brand', 'ProductUnit', 'StockMovement', 'StockAlert', 'ProductLocation'],
             'Ticari': ['Supplier', 'Customer', 'CustomerCompany'],
             'Finans': ['PriceList', 'Offers', 'Invoices', 'Offer', 'Invoice', 'OfferItem', 'InvoiceItem'],
-            'Sistem': ['Users', 'Companies', 'System', 'Logs', 'Auth', 'User', 'Role', 'UserPermission', 'UserApiKey', 'SystemSetting', 'LicenseInfo', 'AuditLog', 'Company', 'Title']
+            'Sistem': ['Users', 'Companies', 'System', 'Logs', 'Auth', 'User', 'Role', 'UserPermission', 'UserApiKey', 'SystemSetting', 'LicenseInfo', 'AuditLog', 'Company', 'Title', 'ShowDeletedItems']
         };
 
         for (const [groupName, moduleNames] of Object.entries(PERMISSION_GROUPS)) {
@@ -1289,7 +1745,7 @@ window.savePermissions = async function () {
         });
 
         if (res.ok) {
-            alert("Yetkiler güncellendi.");
+            showToast("Yetkiler güncellendi");
             closePermissionsModal();
         } else {
             const error = await res.json();
@@ -1305,7 +1761,7 @@ window.closePermissionsModal = function () { document.getElementById('permission
 
 // DELETE USER
 window.deleteUser = async function (userId, userName) {
-    if (!(await showConfirm('Kullanıcı Silme', `"${userName}" kullanıcısını silmek istediğinizden emin misiniz?\n\nBu işlem geri alınamaz!`))) {
+    if (!(await showConfirm('Kullanıcı Silme', `"${userName}" kullanıcısını silmek istediğinizden emin misiniz?`))) {
         return;
     }
 
@@ -1315,7 +1771,7 @@ window.deleteUser = async function (userId, userName) {
         });
 
         if (res.ok) {
-            alert('Kullanıcı başarıyla silindi.');
+            showToast('Kullanıcı başarıyla silindi');
             loadUsers(); // Refresh list
         } else {
             const error = await res.json();
@@ -1327,6 +1783,7 @@ window.deleteUser = async function (userId, userName) {
     }
 }
 
+
 // OFFERS & INVOICES
 window.loadOffers = async function () {
     const tbody = document.getElementById('offerListBody');
@@ -1334,22 +1791,30 @@ window.loadOffers = async function () {
     tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;">Yükleniyor...</td></tr>';
 
     try {
-        const res = await fetch(`${API_BASE_URL}/api/offer`);
+        const statusFilter = window.currentStatusFilter['offers'] || 'active';
+        const res = await fetch(`${API_BASE_URL}/api/offer?status=${statusFilter}`);
         if (res.status === 403) {
             tbody.innerHTML = '<tr><td colspan="7" style="color:var(--error); text-align:center;">🚫 Yetkisiz Erişim</td></tr>';
             return;
         }
         if (!res.ok) throw new Error('Teklifler alınamadı');
-        const offers = await res.json();
+        let offers = await res.json();
+
+        const filterEl = document.getElementById('offerStatusFilter');
+        if (filterEl && filterEl.value) {
+            offers = offers.filter(o => o.status === parseInt(filterEl.value));
+        }
 
         tbody.innerHTML = '';
         if (offers.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;">Teklif bulunamadı.</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;">Aranılan filtreye uygun teklif bulunamadı.</td></tr>';
             return;
         }
 
         offers.forEach(o => {
             const tr = document.createElement('tr');
+            if (o.isDeleted) tr.style.opacity = '0.6';
+
             // Status: 1=Pending, 2=Approved, 3=Rejected
             let statusBadge = '<span class="badge" style="background:#f3f4f6;">Bekliyor</span>';
             if (o.status === 2) statusBadge = '<span class="badge" style="background:var(--success); color:white;">Onaylı</span>';
@@ -1359,23 +1824,28 @@ window.loadOffers = async function () {
             let actions = '';
             const canWrite = window.hasPermission('Offers', 'write');
 
-            if (canWrite) {
-                actions += `<button class="btn-action btn-edit" onclick="editOffer(${o.id})">Düzenle</button>`;
-
-                if (o.status === 1) { // Pending
-                    actions += `<button class="btn-action" style="background:#10b981;" onclick="approveOffer(${o.id})">Onayla</button>`;
-                } else if (o.status === 2) { // Approved
-                    // Typically invoicing requires invoice permission too, but let's assume Offer write allows transition
-                    actions += `<button class="btn-action" style="background:#4f46e5; min-width:100px;" onclick="createInvoiceFromOffer(${o.id})">Faturalaştır</button>`;
-                } else if (o.status === 4) { // Completed/Invoiced
+            if (canWrite && !o.isDeleted) {
+                if (o.status === 4) { // Completed/Invoiced
                     actions = '<span style="color:var(--muted); font-size:0.8rem;">İşlem Tamamlandı</span>';
+                } else {
+                    actions += `<button class="btn-action btn-edit" onclick="editOffer(${o.id})">Düzenle</button>`;
+
+                    if (o.status === 1) { // Pending
+                        actions += `<button class="btn-action" style="background:#10b981;" onclick="approveOffer(${o.id})">Onayla</button>`;
+                    } else if (o.status === 2) { // Approved
+                        actions += `<button class="btn-action" style="background:#4f46e5; min-width:100px;" onclick="createInvoiceFromOffer(${o.id})">Faturalaştır</button>`;
+                    }
+
+                    actions += `<button class="btn-action btn-delete" onclick="deleteOffer(${o.id})">Sil</button>`;
                 }
+            } else if (o.isDeleted) {
+                actions = window.hasPermission('ShowDeletedItems', 'write')
+                    ? `<button class="btn-action" style="background:#10b981;" onclick="restoreEntity('offer', ${o.id})">✅ Geri Yükle</button>`
+                    : '<span style="font-size:0.75rem; color:var(--muted); font-style:italic;">Silindi</span>';
             }
 
-            actions += `<button class="btn-action btn-delete" onclick="deleteOffer(${o.id})">Sil</button>`;
-
             tr.innerHTML = `
-                <td><strong>${o.offerNumber || '-'}</strong></td>
+                <td><strong>${o.offerNumber || '-'}</strong> ${o.isDeleted ? '<br><span class="badge" style="background:#fecaca;color:#991b1b;font-size:0.65rem;">PASİF</span>' : ''}</td>
                 <td>${o.customerName || o.customerId}</td>
                 <td>${new Date(o.offerDate).toLocaleDateString()}</td>
                 <td>${new Date(o.validUntil).toLocaleDateString()}</td>
@@ -1384,6 +1854,7 @@ window.loadOffers = async function () {
                 <td style="text-align:right;">
                     <div class="action-btn-container">
                         ${actions}
+                        ${o.isDeleted && window.hasPermission('ShowDeletedItems', 'write') ? `<button class="btn-action" style="background:#10b981;" onclick="restoreEntity('offer', ${o.id})">✅ Geri Yükle</button>` : ''}
                     </div>
                 </td>
             `;
@@ -1401,7 +1872,8 @@ window.loadInvoices = async function () {
     tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;">Yükleniyor...</td></tr>';
 
     try {
-        const res = await fetch(`${API_BASE_URL}/api/invoices`);
+        const filter = window.currentStatusFilter['invoices'] || 'active';
+        const res = await fetch(`${API_BASE_URL}/api/invoices?status=${filter}`);
         if (res.status === 403) {
             tbody.innerHTML = '<tr><td colspan="6" style="color:var(--error); text-align:center;">🚫 Yetkisiz Erişim</td></tr>';
             return;
@@ -1417,15 +1889,23 @@ window.loadInvoices = async function () {
 
         invoices.forEach(i => {
             const tr = document.createElement('tr');
+            if (i.isDeleted) tr.style.opacity = '0.6';
+
             // Status: 1=Draft, 5=Approved
             let statusBadge = '<span class="badge" style="background:#f3f4f6;">Taslak</span>';
             if (i.status === 5) statusBadge = '<span class="badge" style="background:var(--success); color:white;">Onaylı</span>';
+            if (i.isDeleted) statusBadge = '<span class="badge" style="background:#fecaca;color:#991b1b;font-size:0.65rem;">PASİF (SİLİNDİ)</span>';
 
             let actions = '';
             // Only allow approval if has Write permission
             const canWrite = window.hasPermission('Invoices', 'write');
-            if (i.status === 1 && canWrite) { // Draft
+            if (!i.isDeleted && i.status === 1 && canWrite) { // Draft
                 actions += `<button class="btn-action" style="min-width:140px; background:var(--primary);" onclick="approveInvoice(${i.id})">Onayla & Stok Düş</button>`;
+                actions += `<button class="btn-action" style="background:#ef4444;" onclick="rejectInvoice(${i.id})">Reddet</button>`;
+            } else if (i.isDeleted) {
+                actions = window.hasPermission('ShowDeletedItems', 'write')
+                    ? `<button class="btn-action" style="background:#10b981;" onclick="restoreEntity('invoice', ${i.id})">✅ Geri Yükle</button>`
+                    : '<span style="font-size:0.75rem; color:var(--muted); font-style:italic;">İşlem Yapılamaz</span>';
             }
 
             tr.innerHTML = `
@@ -1437,6 +1917,7 @@ window.loadInvoices = async function () {
                 <td style="text-align:right;">
                     <div class="action-btn-container">
                         ${actions}
+                        ${i.isDeleted && window.hasPermission('ShowDeletedItems', 'write') ? `<button class="btn-action" style="background:#10b981;" onclick="restoreEntity('invoice', ${i.id})">✅ Geri Yükle</button>` : ''}
                     </div>
                 </td>
             `;
@@ -1448,6 +1929,21 @@ window.loadInvoices = async function () {
     }
 }
 
+window.rejectInvoice = async function (id) {
+    if (!(await showConfirm('Reddet', 'Bu faturayı reddetmek istediğinize emin misiniz? Fatura iptal edilecek ve bağlı teklif tekrar onaysız hale gelecektir.', 'Reddet', 'İptal'))) return;
+    try {
+        const res = await fetch(`${API_BASE_URL}/api/invoice/${id}/reject`, {
+            method: 'POST'
+        });
+        if (res.ok) {
+            showToast('Fatura reddedildi');
+            loadInvoices();
+        } else {
+            alert('İşlem başarısız.');
+        }
+    } catch (e) { alert('Hata: ' + e.message); }
+}
+
 window.approveOffer = async function (id) {
     if (!(await showConfirm('Onay', 'Teklifi onaylamak istiyor musunuz?', 'Onayla', 'İptal'))) return;
     try {
@@ -1456,7 +1952,7 @@ window.approveOffer = async function (id) {
             method: 'POST'
         });
         if (res.ok) {
-            alert('Teklif onaylandı.');
+            showToast('Teklif onaylandı');
             loadOffers();
         } else {
             alert('İşlem başarısız.');
@@ -1469,7 +1965,7 @@ window.deleteOffer = async function (id) {
     try {
         const res = await fetch(`${API_BASE_URL}/api/offer/${id}`, { method: 'DELETE' });
         if (res.ok) {
-            alert('Teklif başarıyla silindi.');
+            showToast('Teklif başarıyla silindi');
             loadOffers();
         } else {
             const err = await res.text();
@@ -1485,8 +1981,8 @@ window.createInvoiceFromOffer = async function (id) {
         const res = await fetch(`${API_BASE_URL}/api/offer/${id}/invoice?userId=${user.id}`, { method: 'POST' });
         if (res.ok) {
             const invoiceId = await res.json();
-            alert('Fatura oluşturuldu. ID: ' + invoiceId);
-            switchView('invoices');
+            showToast('Fatura başarıyla oluşturuldu');
+            loadOffers();
         } else {
             alert('İşlem başarısız.');
         }
@@ -1496,9 +1992,10 @@ window.createInvoiceFromOffer = async function (id) {
 window.approveInvoice = async function (id) {
     if (!(await showConfirm('Fatura Onayı', 'Faturayı onaylamak ve stok düşümü yapmak istiyor musunuz?', 'Onayla', 'İptal'))) return;
     try {
-        const res = await fetch(`${API_BASE_URL}/api/invoices/${id}/approve`, { method: 'POST' });
+        const user = JSON.parse(localStorage.getItem('user'));
+        const res = await fetch(`${API_BASE_URL}/api/invoices/${id}/approve?userId=${user.id}`, { method: 'POST' });
         if (res.ok) {
-            alert('Fatura onaylandı ve stok güncellendi.');
+            showToast('Fatura onaylandı ve stok güncellendi');
             loadInvoices();
         } else {
             alert('İşlem başarısız.');
@@ -1517,7 +2014,8 @@ window.loadCompanies = async function () {
     if (!tbody) return;
     tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;">Yükleniyor...</td></tr>';
     try {
-        const res = await fetch(`${API_BASE_URL}/api/companies`);
+        const filter = window.currentStatusFilter['companies'] || 'active';
+        const res = await fetch(`${API_BASE_URL}/api/companies?status=${filter}`);
         if (res.status === 403) {
             tbody.innerHTML = '<tr><td colspan="4" style="color:var(--error); text-align:center;">🚫 Yetkisiz Erişim</td></tr>';
             return;
@@ -1534,7 +2032,11 @@ window.loadCompanies = async function () {
             tr.innerHTML = `<td>${c.companyName}</td><td>${c.taxNumber || '-'}</td><td>${c.allowNegativeStock ? 'Evet' : 'Hayır'}</td>
                 <td style="text-align:right;">
                     <div class="action-btn-container">
-                        ${canDelete ? `<button class="btn-action btn-delete" onclick="deleteCompany(${c.id}, '${c.companyName}')">Sil</button>` : ''}
+                        ${!c.isDeleted ? `
+                            <button class="btn-action btn-edit" onclick="openCompanyModal(${c.id})">Düzenle</button>
+                            ${canDelete ? `<button class="btn-action btn-delete" onclick="deleteCompany(${c.id}, '${c.companyName}')">Sil</button>` : ''}
+                        ` : ''}
+                        ${c.isDeleted && window.hasPermission('ShowDeletedItems', 'write') ? `<button class="btn-action" style="background:#10b981;" onclick="restoreEntity('company', ${c.id})">✅ Geri Yükle</button>` : ''}
                     </div>
                 </td>`;
             tbody.appendChild(tr);
@@ -1542,9 +2044,46 @@ window.loadCompanies = async function () {
     } catch (e) { console.error(e); tbody.innerHTML = '<tr><td colspan="4" style="color:var(--error);">Hata!</td></tr>'; }
 }
 
-window.openCompanyModal = function () { document.getElementById('companyModal').style.display = 'flex'; }
+window.openCompanyModal = async function (id) {
+    const modal = document.getElementById('companyModal');
+    modal.style.display = 'flex';
+    const cid = document.getElementById('cId');
+    const title = document.getElementById('companyModalTitle');
+
+    // Reset
+    cid.value = '';
+    document.getElementById('cName').value = '';
+    document.getElementById('cTax').value = '';
+    document.getElementById('cAddr').value = '';
+    document.getElementById('cNegative').checked = false;
+
+    if (id) {
+        title.innerText = 'Şirket Düzenle';
+        cid.value = id;
+        try {
+            const res = await fetch(`${API_BASE_URL}/api/companies/${id}`);
+            if (res.ok) {
+                const c = await res.json();
+                console.log("Loading company data:", c);
+                document.getElementById('cName').value = c.companyName || c.CompanyName || '';
+                document.getElementById('cTax').value = c.taxNumber || c.TaxNumber || '';
+                document.getElementById('cAddr').value = c.address || c.Address || '';
+                document.getElementById('cNegative').checked = (c.allowNegativeStock === true || c.AllowNegativeStock === true);
+            } else {
+                console.error("Company fetch failed:", res.status);
+                showToast("Şirket bilgileri yüklenemedi", "error");
+            }
+        } catch (e) {
+            console.error("Company load failed", e);
+            showToast("Bağlantı hatası", "error");
+        }
+    } else {
+        title.innerText = 'Yeni Şirket';
+    }
+}
 
 window.createCompany = async function () {
+    const id = document.getElementById('cId').value;
     const dto = {
         companyName: document.getElementById('cName').value,
         taxNumber: document.getElementById('cTax').value,
@@ -1554,10 +2093,17 @@ window.createCompany = async function () {
     if (!dto.companyName) return alert('Şirket adı zorunlu.');
 
     try {
-        const res = await fetch(`${API_BASE_URL}/api/companies`, {
-            method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(dto)
+        const url = id ? `${API_BASE_URL}/api/companies/${id}` : `${API_BASE_URL}/api/companies`;
+        const method = id ? 'PUT' : 'POST';
+
+        const res = await fetch(url, {
+            method: method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(dto)
         });
-        if (res.ok) { alert('Şirket eklendi.'); closeModal('companyModal'); loadCompanies(); }
+        if (res.ok) {
+            showToast(id ? 'Şirket güncellendi' : 'Şirket eklendi');
+            closeModal('companyModal');
+            loadCompanies();
+        }
         else {
             let errMsg = 'Bilinmeyen hata';
             try {
@@ -1592,7 +2138,6 @@ window.switchInvTab = function (tabName) {
         if (perm) {
             const [m, t] = perm.split(':');
             if (!window.hasPermission(m, (t || '').toLowerCase())) {
-                // If trying to switch to a restricted tab, stop.
                 return;
             }
         }
@@ -1604,6 +2149,19 @@ window.switchInvTab = function (tabName) {
 
     document.querySelectorAll('.tab-inv-btn').forEach(el => el.classList.remove('active'));
     if (btn) btn.classList.add('active');
+
+    // Update the Filter Callback for the current tab
+    const callbackMap = {
+        'products': 'loadProducts',
+        'warehouses': 'loadWarehouses',
+        'brands': 'loadBrands',
+        'categories': 'loadCategories',
+        'units': 'loadUnits'
+    };
+
+    if (callbackMap[tabName]) {
+        window.renderStatusFilter('inventory', 'filter-container-inventory', callbackMap[tabName]);
+    }
 
     if (tabName === 'products') loadProducts();
     if (tabName === 'stock-entry') loadStockEntry();
@@ -1620,8 +2178,11 @@ window.loadProducts = async function () {
     if (!tbody) return;
     tbody.innerHTML = '<tr><td colspan="8">Yükleniyor...</td></tr>';
     try {
-        // Fetch products first to check permission
-        const prodRes = await fetch(`${API_BASE_URL}/api/product`);
+        const filter = window.currentStatusFilter['inventory'] || 'active';
+        const searchTerm = document.getElementById('inventorySearchInput')?.value || '';
+
+        // Fetch products with status filter and search term
+        const prodRes = await fetch(`${API_BASE_URL}/api/product?status=${filter}&searchTerm=${encodeURIComponent(searchTerm)}`);
         if (prodRes.status === 403) {
             tbody.innerHTML = '<tr><td colspan="8" style="color:var(--error); text-align:center;">🚫 Bu verileri görmeye yetkiniz bulunmamaktadır.</td></tr>';
             return;
@@ -1630,48 +2191,50 @@ window.loadProducts = async function () {
 
         const products = await prodRes.json();
 
-        // Fetch other data in parallel
+        // Fetch other data in parallel (status filtering applied there too for consistency)
         const [brands, cats, units, warehouses] = await Promise.all([
-            fetch(`${API_BASE_URL}/api/product/brands`).then(r => r.ok ? r.json() : []),
-            fetch(`${API_BASE_URL}/api/product/categories`).then(r => r.ok ? r.json() : []),
-            fetch(`${API_BASE_URL}/api/product/units`).then(r => r.ok ? r.json() : []),
-            fetch(`${API_BASE_URL}/api/warehouse`).then(r => r.ok ? r.json() : [])
+            fetch(`${API_BASE_URL}/api/product/brands?status=${filter}`).then(r => r.ok ? r.json() : []),
+            fetch(`${API_BASE_URL}/api/product/categories?status=${filter}`).then(r => r.ok ? r.json() : []),
+            fetch(`${API_BASE_URL}/api/product/units?status=${filter}`).then(r => r.ok ? r.json() : []),
+            fetch(`${API_BASE_URL}/api/warehouse?status=${filter}`).then(r => r.ok ? r.json() : [])
         ]);
 
         tbody.innerHTML = '';
         if (products.length === 0) { tbody.innerHTML = '<tr><td colspan="9">Kayıt yok.</td></tr>'; return; }
 
         // Helper to find names
-        const getBrandName = (id) => (brands.find(b => b.id === id) || {}).brandName || '-';
-        const getCatName = (id) => (cats.find(c => c.id === id) || {}).categoryName || '-';
-        const getUnitName = (id) => (units.find(u => u.id === id) || {}).unitShortName || '-';
-        const getWareName = (id) => (warehouses.find(w => w.id === id) || {}).warehouseName || '-';
+        const getBrandName = (p) => p.brandName || '-';
+        const getCatName = (p) => p.categoryName || '-';
+        const getUnitName = (p) => p.unitName || '-';
+        const getWareName = (p) => p.warehouseName || '-';
 
         const canWrite = window.hasPermission('Product', 'write');
         const canDelete = window.hasPermission('Product', 'delete');
 
         products.forEach(p => {
             const tr = document.createElement('tr');
+            if (p.isDeleted) tr.style.opacity = '0.6';
+
             const imgUrl = p.imageUrl || 'https://via.placeholder.com/40';
             tr.innerHTML = `
                 <td><img src="${imgUrl}" style="width:40px; height:40px; object-fit:contain; border-radius:4px; border:1px solid #eee;"></td>
-                <td>${p.productCode || '-'}</td>
-                <td><small class="badge" style="background:#f1f5f9; color:#475569; font-family:monospace;">${p.systemCode || 'Oluşturuluyor...'}</small></td>
+                <td>${p.productCode || '-'} ${p.isDeleted ? '<br><span class="badge" style="background:#fecaca;color:#991b1b;font-size:0.65rem;">PASİF (SİLİNDİ)</span>' : ''}</td>
                 <td>${p.productName}</td>
-                <td>${getCatName(p.categoryId)}</td>
-                <td>${getBrandName(p.brandId)}</td>
-                <td>${getWareName(p.warehouseId)}</td>
-                <td>${p.currentStock} ${getUnitName(p.unitId)}</td>
+                <td>${getCatName(p)}</td>
+                <td>${getBrandName(p)}</td>
+                <td>${getWareName(p)}</td>
+                <td>${p.currentStock} ${getUnitName(p)}</td>
                 <td style="text-align:right;">
                     <div class="action-btn-container">
-                        ${canWrite ? `
+                        ${canWrite && !p.isDeleted ? `
                          <button class="btn-action btn-edit" 
                             onclick="openProductModal(${p.id})">Düzenle</button>
                         ` : ''}
-                        ${canDelete ? `
+                        ${canDelete && !p.isDeleted ? `
                         <button class="btn-action btn-delete" 
                             onclick="deleteProduct(${p.id})">Sil</button>
                         ` : ''}
+                        ${p.isDeleted ? (window.hasPermission('ShowDeletedItems', 'write') ? `<button class="btn-action" style="background:#10b981;" onclick="restoreEntity('product', ${p.id})">✅ Geri Yükle</button>` : '<span style="font-size:0.75rem; color:var(--muted); font-style:italic;">İşlem Yapılamaz</span>') : ''}
                     </div>
                 </td>
             `;
@@ -1682,6 +2245,127 @@ window.loadProducts = async function () {
         tbody.innerHTML = '<tr><td colspan="8" style="color:red;">Hata: ' + e.message + '</td></tr>';
     }
 }
+
+window.loadWarehouses = async function () {
+    const tbody = document.getElementById('warehouseListBody');
+    const tbodyMain = document.getElementById('warehouseListBody_Main');
+    if (!tbody && !tbodyMain) return;
+
+    if (tbody) tbody.innerHTML = '<tr><td colspan="4">Yükleniyor...</td></tr>';
+    if (tbodyMain) tbodyMain.innerHTML = '<tr><td colspan="4">Yükleniyor...</td></tr>';
+
+    try {
+        const filter = window.currentStatusFilter['inventory'] || 'active';
+        const searchTerm = document.getElementById('inventorySearchInput')?.value || '';
+        const res = await fetch(`${API_BASE_URL}/api/warehouse?status=${filter}&searchTerm=${encodeURIComponent(searchTerm)}`);
+        const data = await res.json();
+
+        const renderRows = (target) => {
+            if (!target) return;
+            target.innerHTML = '';
+            if (data.length === 0) { target.innerHTML = '<tr><td colspan="4">Kayıt yok.</td></tr>'; return; }
+
+            const canDelete = window.hasPermission('WarehouseManagement', 'delete');
+
+            data.forEach(w => {
+                const tr = document.createElement('tr');
+                if (w.isDeleted) tr.style.opacity = '0.6';
+                tr.innerHTML = `
+                    <td>${w.warehouseName} ${w.isDeleted ? '<span class="badge" style="background:#fecaca;color:#991b1b;font-size:0.65rem;margin-left:5px;">PASİF</span>' : ''}</td>
+                    <td>${w.location || '-'}</td>
+                    <td>${w.companyName || '-'}</td>
+                    <td style="text-align:right;">
+                        <div class="action-btn-container">
+                            ${!w.isDeleted ? `
+                            <button class="btn-action btn-edit" onclick="openWarehouseModal(${w.id})">Düzenle</button>
+                            ${canDelete ? `<button class="btn-action btn-delete" onclick="deleteWarehouse(${w.id})">Sil</button>` : ''}
+                            ` : (window.hasPermission('ShowDeletedItems', 'write') ? `<button class="btn-action" style="background:#10b981;" onclick="restoreEntity('warehouse', ${w.id})">✅ Geri Yükle</button>` : '<span style="font-size:0.75rem; color:var(--muted); font-style:italic;">Silindi</span>')}
+                        </div>
+                    </td>`;
+                target.appendChild(tr);
+            });
+        };
+
+        renderRows(tbody);
+        renderRows(tbodyMain);
+    } catch (e) { console.error(e); }
+};
+
+window.loadBrands = async function () {
+    const tbody = document.getElementById('brandListBody');
+    if (!tbody) return;
+    tbody.innerHTML = '<tr><td colspan="2">Yükleniyor...</td></tr>';
+    try {
+        const filter = window.currentStatusFilter['inventory'] || 'active';
+        const searchTerm = document.getElementById('inventorySearchInput')?.value || '';
+        const res = await fetch(`${API_BASE_URL}/api/product/brands?status=${filter}&searchTerm=${encodeURIComponent(searchTerm)}`);
+        const data = await res.json();
+        tbody.innerHTML = '';
+        if (data.length === 0) { tbody.innerHTML = '<tr><td colspan="2">Kayıt yok.</td></tr>'; return; }
+        const canWrite = window.hasPermission('Product', 'write');
+        data.forEach(b => {
+            const tr = document.createElement('tr');
+            if (b.isDeleted) tr.style.opacity = '0.6';
+            tr.innerHTML = `<td>${b.brandName} ${b.isDeleted ? '<span class="badge" style="background:#fecaca;color:#991b1b;font-size:0.65rem;margin-left:5px;">PASİF</span>' : ''}</td>
+                <td style="text-align:right;">
+                    ${canWrite && !b.isDeleted ? `<button class="btn-action btn-delete" onclick="deleteSimple('Brand', ${b.id})">Sil</button>` : ''}
+                    ${b.isDeleted && window.hasPermission('ShowDeletedItems', 'write') ? `<button class="btn-action" style="background:#10b981;" onclick="restoreEntity('brand', ${b.id})">✅ Geri Yükle</button>` : ''}
+                </td>`;
+            tbody.appendChild(tr);
+        });
+    } catch (e) { console.error(e); }
+};
+
+window.loadCategories = async function () {
+    const tbody = document.getElementById('categoryListBody');
+    if (!tbody) return;
+    tbody.innerHTML = '<tr><td colspan="2">Yükleniyor...</td></tr>';
+    try {
+        const filter = window.currentStatusFilter['inventory'] || 'active';
+        const searchTerm = document.getElementById('inventorySearchInput')?.value || '';
+        const res = await fetch(`${API_BASE_URL}/api/product/categories?status=${filter}&searchTerm=${encodeURIComponent(searchTerm)}`);
+        const data = await res.json();
+        tbody.innerHTML = '';
+        if (data.length === 0) { tbody.innerHTML = '<tr><td colspan="2">Kayıt yok.</td></tr>'; return; }
+        const canWrite = window.hasPermission('Product', 'write');
+        data.forEach(c => {
+            const tr = document.createElement('tr');
+            if (c.isDeleted) tr.style.opacity = '0.6';
+            tr.innerHTML = `<td>${c.categoryName} ${c.isDeleted ? '<span class="badge" style="background:#fecaca;color:#991b1b;font-size:0.65rem;margin-left:5px;">PASİF</span>' : ''}</td>
+                <td style="text-align:right;">
+                    ${canWrite && !c.isDeleted ? `<button class="btn-action btn-delete" onclick="deleteSimple('Category', ${c.id})">Sil</button>` : ''}
+                    ${c.isDeleted && window.hasPermission('ShowDeletedItems', 'write') ? `<button class="btn-action" style="background:#10b981;" onclick="restoreEntity('category', ${c.id})">✅ Geri Yükle</button>` : ''}
+                </td>`;
+            tbody.appendChild(tr);
+        });
+    } catch (e) { console.error(e); }
+};
+
+window.loadUnits = async function () {
+    const tbody = document.getElementById('unitListBody');
+    if (!tbody) return;
+    tbody.innerHTML = '<tr><td colspan="3">Yükleniyor...</td></tr>';
+    try {
+        const filter = window.currentStatusFilter['inventory'] || 'active';
+        const searchTerm = document.getElementById('inventorySearchInput')?.value || '';
+        const res = await fetch(`${API_BASE_URL}/api/product/units?status=${filter}&searchTerm=${encodeURIComponent(searchTerm)}`);
+        const data = await res.json();
+        tbody.innerHTML = '';
+        if (data.length === 0) { tbody.innerHTML = '<tr><td colspan="3">Kayıt yok.</td></tr>'; return; }
+        const canWrite = window.hasPermission('Product', 'write');
+        data.forEach(u => {
+            const tr = document.createElement('tr');
+            if (u.isDeleted) tr.style.opacity = '0.6';
+            tr.innerHTML = `<td>${u.unitName} ${u.isDeleted ? '<span class="badge" style="background:#fecaca;color:#991b1b;font-size:0.65rem;margin-left:5px;">PASİF</span>' : ''}</td>
+                <td>${u.unitShortName}</td>
+                <td style="text-align:right;">
+                    ${canWrite && !u.isDeleted ? `<button class="btn-action btn-delete" onclick="deleteSimple('Unit', ${u.id})">Sil</button>` : ''}
+                    ${u.isDeleted && window.hasPermission('ShowDeletedItems', 'write') ? `<button class="btn-action" style="background:#10b981;" onclick="restoreEntity('unit', ${u.id})">✅ Geri Yükle</button>` : ''}
+                </td>`;
+            tbody.appendChild(tr);
+        });
+    } catch (e) { console.error(e); }
+};
 
 window.loadShelvesForProduct = async function (warehouseId, selectedShelfId = null) {
     const shelfSel = document.getElementById('pShelf');
@@ -1835,7 +2519,7 @@ window.createProduct = async function () {
         });
 
         if (res.ok) {
-            alert(id ? 'Ürün güncellendi.' : 'Ürün başarıyla eklendi.');
+            showToast(id ? 'Ürün güncellendi' : 'Ürün başarıyla eklendi');
             closeModal('productModal');
             loadProducts();
         } else {
@@ -2040,7 +2724,7 @@ window.saveQuickActionSettings = async function () {
         // Update local storage
         localStorage.setItem('user', JSON.stringify(updatedUser));
 
-        alert('Hızlı işlem ayarlarınız başarıyla kaydedildi!');
+        showToast('Hızlı işlem ayarlarınız başarıyla kaydedildi!');
         switchView('dashboard');
     } catch (e) {
         alert('Hata: ' + e.message);
@@ -2100,7 +2784,7 @@ window.updateProfile = async function () {
         if (!updatedUser.roleId) updatedUser.roleId = user.roleId;
 
         localStorage.setItem('user', JSON.stringify(updatedUser)); // Update local storage
-        alert('Profil bilgileriniz güncellendi.');
+        showToast('Profil bilgileriniz güncellendi');
 
         // Update header name display if Dashboard is loaded
         const userDisplay = document.getElementById('userNameDisplay');
@@ -2441,9 +3125,9 @@ window.deleteProduct = async function (id) {
     if (!(await showConfirm('Ürün Silme', 'Bu ürünü silmek istediğinize emin misiniz?'))) return;
     try {
         const res = await fetch(`${API_BASE_URL}/api/product/${id}`, { method: 'DELETE' });
-        if (res.ok) { alert('Ürün silindi.'); loadProducts(); }
-        else alert('Silinemedi.');
-    } catch (e) { alert(e.message); }
+        if (res.ok) { showToast('Ürün silindi'); loadProducts(); }
+        else showToast('Silinemedi', 'error');
+    } catch (e) { showToast(e.message, 'error'); }
 }
 
 // WAREHOUSES
@@ -2454,7 +3138,8 @@ window.loadWarehouses = async function () {
     if (tables.length === 0) return;
 
     try {
-        const res = await fetch(`${API_BASE_URL}/api/warehouse`);
+        const filter = window.currentStatusFilter['inventory'] || 'active';
+        const res = await fetch(`${API_BASE_URL}/api/warehouse?status=${filter}`);
         if (res.status === 403) {
             tables.forEach(tbody => {
                 tbody.innerHTML = '<tr><td colspan="4" style="color:var(--error); text-align:center;">🚫 Bu verileri görmeye yetkiniz bulunmamaktadır.</td></tr>';
@@ -2469,21 +3154,24 @@ window.loadWarehouses = async function () {
             : data.map(w => {
                 const canWrite = window.hasPermission('Warehouse', 'write');
                 const canDelete = window.hasPermission('Warehouse', 'delete');
+                const rowStyle = w.isDeleted ? 'style="opacity:0.6"' : '';
+                const passiveBadge = w.isDeleted ? '<span class="badge" style="background:#fecaca;color:#991b1b;font-size:0.65rem;margin-left:5px;">PASİF</span>' : '';
                 return `
-                <tr>
-                    <td>${w.warehouseName}</td>
+                <tr ${rowStyle}>
+                    <td><strong>${w.warehouseName}</strong> ${passiveBadge}</td>
                     <td>${w.location}</td>
                     <td>${w.companyId}</td>
                     <td style="text-align:right;">
                         <div class="action-btn-container">
-                            ${canWrite ? `
+                            ${canWrite && !w.isDeleted ? `
                             <button class="btn-action btn-edit"
                                 onclick="openWarehouseModal(${w.id}, '${w.warehouseName}', '${w.location}', ${w.companyId})">Düzenle</button>
                             ` : ''}
-                            ${canDelete ? `
+                            ${canDelete && !w.isDeleted ? `
                             <button class="btn-action btn-delete"
                                 onclick="deleteWarehouse(${w.id})">Sil</button>
                             ` : ''}
+                            ${w.isDeleted ? (window.hasPermission('ShowDeletedItems', 'write') ? `<button class="btn-action" style="background:#10b981;" onclick="restoreEntity('warehouse', ${w.id})">✅ Geri Yükle</button>` : '<span style="font-size:0.75rem; color:var(--muted); font-style:italic;">Pasif</span>') : ''}
                         </div>
                     </td>
                 </tr>`;
@@ -2537,7 +3225,7 @@ window.createWarehouse = async function () {
         });
 
         if (res.ok) {
-            alert(id ? 'Depo güncellendi.' : 'Depo eklendi.');
+            showToast(id ? 'Depo güncellendi' : 'Depo eklendi');
             closeModal('warehouseModal');
             loadWarehouses();
         }
@@ -2549,7 +3237,7 @@ window.deleteWarehouse = async function (id) {
     if (!(await showConfirm('Depo Silme', 'Bu depoyu silmek istediğinize emin misiniz?'))) return;
     try {
         const res = await fetch(`${API_BASE_URL}/api/warehouse/${id}`, { method: 'DELETE' });
-        if (res.ok) { alert('Depo silindi.'); loadWarehouses(); }
+        if (res.ok) { showToast('Depo silindi'); loadWarehouses(); }
         else alert('Silinemedi.');
     } catch (e) { alert(e.message); }
 }
@@ -2563,7 +3251,8 @@ async function loadSimple(endpoint, tbodyId, nameField) {
     const tbody = document.getElementById(tbodyId);
     if (!tbody) return;
     try {
-        const res = await fetch(`${API_BASE_URL}/api/product/${endpoint}`);
+        const filter = window.currentStatusFilter['inventory'] || 'active';
+        const res = await fetch(`${API_BASE_URL}/api/product/${endpoint}?status=${filter}`);
         if (res.status === 403) {
             let colSpan = endpoint === 'units' ? 3 : 2;
             tbody.innerHTML = `<tr><td colspan="${colSpan}" style="color:var(--error); text-align:center;">🚫 Yetkisiz Erişim</td></tr>`;
@@ -2574,7 +3263,7 @@ async function loadSimple(endpoint, tbodyId, nameField) {
         tbody.innerHTML = '';
         if (data.length === 0) {
             let colSpan = endpoint === 'units' ? 3 : 2;
-            tbody.innerHTML = `<tr><td colspan="${colSpan}">Kayıt yok.</td></tr>`;
+            tbody.innerHTML = `<tr><td colspan="${colSpan}" style="text-align:center;">Kayıt yok.</td></tr>`;
             return;
         }
 
@@ -2600,19 +3289,22 @@ async function loadSimple(endpoint, tbodyId, nameField) {
             }
 
             const tr = document.createElement('tr');
+            if (item.isDeleted) tr.style.opacity = '0.6';
+
             tr.innerHTML = `
-                <td>${item[nameField]}</td>
+                <td><strong>${item[nameField]}</strong> ${item.isDeleted ? '<span class="badge" style="background:#fecaca;color:#991b1b;font-size:0.65rem;margin-left:5px;">PASİF</span>' : ''}</td>
                 ${extra}
                 <td style="text-align:right;">
                     <div class="action-btn-container">
-                        ${canWrite ? `
+                        ${canWrite && !item.isDeleted ? `
                         <button class="btn-action btn-edit" 
                             onclick="openSimpleModal('${type}', ${item.id}, '${item[nameField]}', '${extraVal}')">Düzenle</button>
                         ` : ''}
-                        ${canDelete ? `
+                        ${canDelete && !item.isDeleted ? `
                         <button class="btn-action btn-delete" 
                             onclick="deleteSimple('${endpoint}', ${item.id})">Sil</button>
                         ` : ''}
+                        ${item.isDeleted ? (window.hasPermission('ShowDeletedItems', 'write') ? `<button class="btn-action" style="background:#10b981;" onclick="restoreEntity('${endpoint.substring(0, endpoint.length - 1)}', ${item.id})">✅ Geri Yükle</button>` : '<span style="font-size:0.75rem; color:var(--muted); font-style:italic;">Silindi</span>') : ''}
                     </div>
                 </td>`;
             tbody.appendChild(tr);
@@ -2689,7 +3381,7 @@ window.createSimpleEntity = async function () {
         });
 
         if (res.ok) {
-            alert(id ? 'Güncellendi.' : 'Kaydedildi.');
+            showToast(id ? 'Güncellendi' : 'Kaydedildi');
             closeModal('simpleModal');
             if (type === 'Brand') loadBrands();
             if (type === 'Category') loadCategories();
@@ -2736,9 +3428,10 @@ window.deleteSimple = async function (endpoint, id) {
 window.loadSuppliers = async function () {
     const tbody = document.getElementById('supplierListBody');
     if (!tbody) return;
-    tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;">Yükleniyor...</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;">Yükleniyor...</td></tr>';
     try {
-        const res = await fetch(`${API_BASE_URL}/api/supplier`);
+        const filter = window.currentStatusFilter['suppliers'] || 'active';
+        const res = await fetch(`${API_BASE_URL}/api/supplier?status=${filter}`);
         if (res.status === 403) {
             tbody.innerHTML = '<tr><td colspan="5" style="color:var(--error); text-align:center;">🚫 Yetkisiz Erişim</td></tr>';
             return;
@@ -2752,21 +3445,23 @@ window.loadSuppliers = async function () {
 
         data.forEach(s => {
             const tr = document.createElement('tr');
+            if (s.isDeleted) tr.style.opacity = '0.6';
             tr.innerHTML = `
-                <td><strong>${s.supplierCompanyName}</strong></td>
+                <td><strong>${s.supplierCompanyName}</strong> ${s.isDeleted ? '<span class="badge" style="background:#fecaca;color:#991b1b;font-size:0.65rem;margin-left:5px;">PASİF</span>' : ''}</td>
                 <td>${s.supplierContactName || '-'}</td>
                 <td>${s.supplierContactMail || '-'}</td>
                 <td>${s.supplierAddress || '-'}</td>
                 <td style="text-align:right;">
                     <div class="action-btn-container">
-                        ${canWrite ? `
+                        ${canWrite && !s.isDeleted ? `
                         <button class="btn-action btn-edit" 
                             onclick="openSupplierModal(${s.id}, \`${s.supplierCompanyName}\`, \`${s.supplierContactName}\`, \`${s.supplierContactMail}\`, \`${s.supplierAddress}\`)">Düzenle</button>
                         ` : ''}
-                        ${canDelete ? `
+                        ${canDelete && !s.isDeleted ? `
                         <button class="btn-action btn-delete" 
                             onclick="deleteSupplier(${s.id}, '${s.supplierCompanyName}')">Sil</button>
                         ` : ''}
+                        ${s.isDeleted ? (window.hasPermission('ShowDeletedItems', 'write') ? `<button class="btn-action" style="background:#10b981;" onclick="restoreEntity('supplier', ${s.id})">✅ Geri Yükle</button>` : '<span style="font-size:0.75rem; color:var(--muted); font-style:italic;">Silindi</span>') : ''}
                     </div>
                 </td>`;
             tbody.appendChild(tr);
@@ -2832,7 +3527,8 @@ window.loadPriceLists = async function () {
     if (!tbody) return;
     tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;">Yükleniyor...</td></tr>';
     try {
-        const res = await fetch(`${API_BASE_URL}/api/pricelist`);
+        const filter = window.currentStatusFilter['pricelists'] || 'active';
+        const res = await fetch(`${API_BASE_URL}/api/pricelist?status=${filter}`);
         if (res.status === 403) {
             tbody.innerHTML = '<tr><td colspan="7" style="color:var(--error); text-align:center;">🚫 Yetkisiz Erişim</td></tr>';
             return;
@@ -2849,8 +3545,9 @@ window.loadPriceLists = async function () {
 
         data.forEach(item => {
             const tr = document.createElement('tr');
+            if (item.isDeleted) tr.style.opacity = '0.6';
             tr.innerHTML = `
-                <td><strong>${item.productCode} - ${item.productName}</strong></td>
+                <td><strong>${item.productCode} - ${item.productName}</strong> ${item.isDeleted ? '<span class="badge" style="background:#fecaca;color:#991b1b;font-size:0.65rem;margin-left:5px;">PASİF</span>' : ''}</td>
                 <td>${item.supplierName || '-'}</td>
                 <td>${item.purchasePrice}</td>
                 <td>${item.salePrice}</td>
@@ -2858,14 +3555,15 @@ window.loadPriceLists = async function () {
                 <td><span class="badge" style="background:${item.isActivePrice ? '#d1fae5;color:#065f46;' : '#f3f4f6; color:#6b7280;'}">${item.isActivePrice ? 'Aktif' : 'Pasif'}</span></td>
                 <td style="text-align:right;">
                     <div class="action-btn-container">
-                        ${canWrite ? `
+                        ${canWrite && !item.isDeleted ? `
                         <button class="btn-action btn-edit" 
                             onclick="openPriceListModal(${item.id})">Düzenle</button>
                         ` : ''}
-                        ${canDelete ? `
+                        ${canDelete && !item.isDeleted ? `
                         <button class="btn-action btn-delete" 
                             onclick="deletePriceList(${item.id})">Sil</button>
                         ` : ''}
+                        ${item.isDeleted ? '<span style="font-size:0.75rem; color:var(--muted); font-style:italic;">Silindi</span>' : ''}
                     </div>
                 </td>`;
             tbody.appendChild(tr);
@@ -2970,7 +3668,8 @@ window.loadCustomerCompanies = async function () {
     if (!tbody) return;
     tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;">Yükleniyor...</td></tr>';
     try {
-        const res = await fetch(`${API_BASE_URL}/api/customer/companies`);
+        const filter = window.currentStatusFilter['customer-companies'] || 'active';
+        const res = await fetch(`${API_BASE_URL}/api/customer/companies?status=${filter}`);
         if (res.status === 403) {
             tbody.innerHTML = '<tr><td colspan="4" style="color:var(--error); text-align:center;">🚫 Yetkisiz Erişim</td></tr>';
             return;
@@ -2984,20 +3683,22 @@ window.loadCustomerCompanies = async function () {
 
         data.forEach(item => {
             const tr = document.createElement('tr');
+            if (item.isDeleted) tr.style.opacity = '0.6';
             tr.innerHTML = `
-                <td><strong>${item.customerCompanyName}</strong></td>
+                <td><strong>${item.customerCompanyName}</strong> ${item.isDeleted ? '<span class="badge" style="background:#fecaca;color:#991b1b;font-size:0.65rem;margin-left:5px;">PASİF</span>' : ''}</td>
                 <td>${item.customerCompanyMail || '-'}</td>
                 <td>${item.customerCompanyAddress || '-'}</td>
                 <td style="text-align:right;">
                     <div class="action-btn-container">
-                        ${canWrite ? `
+                        ${canWrite && !item.isDeleted ? `
                         <button class="btn-action btn-edit" 
                             onclick="openCustomerCompanyModal(${item.id}, \`${item.customerCompanyName}\`, \`${item.customerCompanyMail}\`, \`${item.customerCompanyAddress}\`)">Düzenle</button>
                         ` : ''}
-                        ${canDelete ? `
+                        ${canDelete && !item.isDeleted ? `
                         <button class="btn-action btn-delete" 
                             onclick="deleteCustomerCompany(${item.id}, '${item.customerCompanyName}')">Sil</button>
                         ` : ''}
+                        ${item.isDeleted ? (window.hasPermission('ShowDeletedItems', 'write') ? `<button class="btn-action" style="background:#10b981;" onclick="restoreEntity('customercompany', ${item.id})">✅ Geri Yükle</button>` : '<span style="font-size:0.75rem; color:var(--muted); font-style:italic;">Silindi</span>') : ''}
                     </div>
                 </td>`;
             tbody.appendChild(tr);
@@ -3054,9 +3755,10 @@ window.deleteCustomerCompany = async function (id, name) {
 window.loadCustomers = async function () {
     const tbody = document.getElementById('customerListBody');
     if (!tbody) return;
-    tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;">Yükleniyor...</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;">Yükleniyor...</td></tr>';
     try {
-        const res = await fetch(`${API_BASE_URL}/api/customer`);
+        const filter = window.currentStatusFilter['customers'] || 'active';
+        const res = await fetch(`${API_BASE_URL}/api/customer?status=${filter}`);
         if (res.status === 403) {
             tbody.innerHTML = '<tr><td colspan="5" style="color:var(--error); text-align:center;">🚫 Yetkisiz Erişim</td></tr>';
             return;
@@ -3070,21 +3772,23 @@ window.loadCustomers = async function () {
 
         data.forEach(item => {
             const tr = document.createElement('tr');
+            if (item.isDeleted) tr.style.opacity = '0.6';
             tr.innerHTML = `
-                <td><strong>${item.customerContactPersonName} ${item.customerContactPersonLastName}</strong></td>
+                <td><strong>${item.customerContactPersonName} ${item.customerContactPersonLastName}</strong> ${item.isDeleted ? '<br><span class="badge" style="background:#fecaca;color:#991b1b;font-size:0.65rem;">PASİF</span>' : ''}</td>
                 <td>${item.customerCompanyName || '-'}</td>
                 <td>${item.customerContactPersonMobilPhone || '-'}</td>
                 <td>${item.customerContactPersonMail || '-'}</td>
                 <td style="text-align:right;">
                     <div class="action-btn-container">
-                        ${canWrite ? `
+                        ${canWrite && !item.isDeleted ? `
                         <button class="btn-action btn-edit" 
                             onclick="openCustomerModal(${item.id})">Düzenle</button>
                         ` : ''}
-                        ${canDelete ? `
+                        ${canDelete && !item.isDeleted ? `
                         <button class="btn-action btn-delete" 
                             onclick="deleteCustomer(${item.id}, '${item.customerContactPersonName}')">Sil</button>
                         ` : ''}
+                        ${item.isDeleted ? (window.hasPermission('ShowDeletedItems', 'write') ? `<button class="btn-action" style="background:#10b981;" onclick="restoreEntity('customer', ${item.id})">✅ Geri Yükle</button>` : '<span style="font-size:0.75rem; color:var(--muted); font-style:italic;">Silindi</span>') : ''}
                     </div>
                 </td>`;
             tbody.appendChild(tr);
@@ -3191,16 +3895,35 @@ window.startOfferWizard = async function () {
     document.getElementById('offerWizardModal').style.display = 'flex';
     wizardNext(1);
 
-    // Load lists for Step 1
-    const [resCust, resWh, resCat] = await Promise.all([
-        fetch(`${API_BASE_URL}/api/customer`), // Fetch Customers (Contacts) instead of Companies
-        fetch(`${API_BASE_URL}/api/warehouse`),
-        fetch(`${API_BASE_URL}/api/product/categories`)
-    ]);
+    try {
+        // Load lists for Step 1
+        const [resCust, resWh, resCat] = await Promise.all([
+            fetch(`${API_BASE_URL}/api/customer`),
+            fetch(`${API_BASE_URL}/api/warehouse`),
+            fetch(`${API_BASE_URL}/api/product/categories`)
+        ]);
 
-    wizardState.customers = await resCust.json();
-    wizardState.warehouses = await resWh.json();
-    wizardState.categories = await resCat.json();
+        if (!resCust.ok) {
+            const err = await resCust.json();
+            throw new Error(`Müşteri listesi alınamadı: ${err.message || resCust.statusText}`);
+        }
+        if (!resWh.ok) {
+            const err = await resWh.json();
+            throw new Error(`Depo listesi alınamadı: ${err.message || resWh.statusText}`);
+        }
+        if (!resCat.ok) {
+            const err = await resCat.json();
+            throw new Error(`Kategori listesi alınamadı: ${err.message || resCat.statusText}`);
+        }
+
+        wizardState.customers = await resCust.json();
+        wizardState.warehouses = await resWh.json();
+        wizardState.categories = await resCat.json();
+    } catch (e) {
+        alert("Bağlantı veya Yetki Hatası: " + e.message);
+        console.error("Wizard Load Error:", e);
+        return; // Stop if data cannot be loaded
+    }
 
     const mSel = document.getElementById('wMusteri');
     const dSel = document.getElementById('wDepo');
@@ -3243,7 +3966,8 @@ window.editOffer = async function (id) {
             stock: 0,
             reserved: 0,
             currency: i.currency || 'TL',
-            imageUrl: i.imageUrl
+            imageUrl: i.imageUrl,
+            categoryName: i.categoryName || 'Diğer'
         }));
 
         // Adım 3'e atla (Fiyatlandırma) ki kullanıcı görsün
@@ -3260,7 +3984,7 @@ window.wizardNext = function (step) {
         wizardState.customerId = document.getElementById('wMusteri').value;
         if (!wizardState.customerId) return alert('Lütfen müşteri seçin.');
         wizardState.warehouseId = document.getElementById('wDepo').value;
-        wizardState.categoryId = document.getElementById('wKategori').value;
+        // wizardState.categoryId is now handled per-product step
     }
 
     if (wizardState.step === 2 && step > 2) {
@@ -3295,9 +4019,13 @@ async function loadWizardProducts() {
     tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;">Yükleniyor...</td></tr>';
 
     try {
+        const catFilter = document.getElementById('wKategori')?.value || '';
         const res = await fetch(`${API_BASE_URL}/api/product`);
         let products = await res.json();
-        if (wizardState.categoryId) products = products.filter(p => p.categoryId == wizardState.categoryId);
+
+        if (catFilter) {
+            products = products.filter(p => p.categoryId == catFilter);
+        }
 
         wizardState.lastLoadedProducts = products;
         tbody.innerHTML = '';
@@ -3314,9 +4042,11 @@ async function loadWizardProducts() {
                 <td style="color:var(--error);">${p.reservedStock || 0}</td>
                 <td><strong style="color:${available > 0 ? 'var(--success)' : 'var(--error)'}">${available}</strong></td>
                 <td>${p.unitName || 'Adet'}</td>
-                <td><input type="number" id="qty-${p.id}" value="1" min="1" style="width:60px; padding:0.25rem; border:1px solid #ddd; border-radius:4px;"></td>
-                <td style="text-align:right;">
-                    <button class="btn-primary" style="padding:0.25rem 0.6rem; font-size:0.8rem; width:auto;" 
+                <td><input type="number" id="qty-${p.id}" value="1" min="1" style="width:50px; padding:0.2rem; border:1px solid #ddd; border-radius:4px;"></td>
+                <td style="text-align:right; white-space:nowrap;">
+                    <button class="btn-primary" style="padding:0.25rem 0.5rem; font-size:0.8rem; width:auto; background:var(--error); margin-right:2px;" 
+                        onclick="minusFromWizardOffer(${p.id})">-</button>
+                    <button class="btn-primary" style="padding:0.25rem 0.5rem; font-size:0.8rem; width:auto;" 
                         onclick="addToWizardOffer(${p.id})">+</button>
                 </td>
                 <td style="text-align:center;"><span id="selected-qty-${p.id}" class="badge" style="background:${selectedQty > 0 ? 'var(--primary)' : '#eee'}; color:${selectedQty > 0 ? 'white' : '#666'};">${selectedQty}</span></td>
@@ -3369,7 +4099,8 @@ window.addToWizardOffer = function (id) {
             stock: stock,
             reserved: reserved,
             currency: product.currency || 'TL',
-            imageUrl: product.imageUrl
+            imageUrl: product.imageUrl,
+            categoryName: product.categoryName || 'Diğer'
         });
     }
 
@@ -3385,6 +4116,50 @@ window.addToWizardOffer = function (id) {
     }
 
     qtyInput.value = 1;
+}
+
+window.minusFromWizardOffer = function (id) {
+    const existing = wizardState.items.find(i => i.id === id);
+    if (!existing) return;
+
+    const qtyInput = document.getElementById(`qty-${id}`);
+    const qty = parseFloat(qtyInput.value) || 1;
+
+    existing.quantity -= qty;
+
+    const badge = document.getElementById(`selected-qty-${id}`);
+    if (existing.quantity <= 0) {
+        wizardState.items = wizardState.items.filter(i => i.id !== id);
+        if (badge) {
+            badge.innerText = '0';
+            badge.style.background = '#eee';
+            badge.style.color = '#666';
+        }
+    } else {
+        if (badge) badge.innerText = existing.quantity;
+    }
+
+    qtyInput.value = 1;
+}
+
+window.updateWizardItemQty = function (id, qty) {
+    const val = parseFloat(qty) || 0;
+    if (val <= 0) {
+        removeFromWizardOffer(id);
+        return;
+    }
+
+    const item = wizardState.items.find(i => i.id === id);
+    if (item) {
+        item.quantity = val;
+
+        // Update badge in product list if visible
+        const badge = document.getElementById(`selected-qty-${id}`);
+        if (badge) badge.innerText = val;
+
+        // Refresh Steps if needed
+        if (wizardState.step === 3) loadWizardPricing();
+    }
 }
 
 function loadWizardPricing() {
@@ -3501,7 +4276,17 @@ window.updateWizardItem = function (id, field, val) {
 }
 window.removeFromWizardOffer = function (id) {
     wizardState.items = wizardState.items.filter(i => i.id !== id);
-    loadWizardPricing();
+
+    // Update Step 2 UI
+    const badge = document.getElementById(`selected-qty-${id}`);
+    if (badge) {
+        badge.innerText = '0';
+        badge.style.background = '#eee';
+        badge.style.color = '#666';
+    }
+
+    // Update Step 3 UI if active
+    if (wizardState.step === 3) loadWizardPricing();
 }
 
 function prepareOfferPreview() {
@@ -3525,10 +4310,19 @@ function prepareOfferPreview() {
     const firstItem = wizardState.items[0];
     const globalSymbol = firstItem ? getCurrencySymbol(firstItem.currency) : '₺';
 
+    // Group items by category
+    const itemsByCategory = wizardState.items.reduce((groups, item) => {
+        const cat = item.categoryName || 'Diğer';
+        if (!groups[cat]) groups[cat] = [];
+        groups[cat].push(item);
+        return groups;
+    }, {});
+
+    area.style.fontSize = "0.85rem"; // Global font size reduction for PDF
     area.innerHTML = `
-        <div style="display:flex; justify-content:space-between; margin-bottom:2rem;">
+        <div style="display:flex; justify-content:space-between; margin-bottom:2rem; font-size: 0.9rem;">
             <div>
-                <h2 style="margin:0; color:var(--primary);">TEKLİF FORMU</h2>
+                <h2 style="margin:0; color:var(--primary); font-size: 1.4rem;">TEKLİF FORMU</h2>
                 <p><strong>Firma:</strong> ${customer ? customer.customerCompanyName : 'Seçilmedi'}</p>
                 <p><strong>Yetkili:</strong> ${customer ? (customer.fullName || customer.customerContactPersonName) : '-'}</p>
             </div>
@@ -3537,42 +4331,49 @@ function prepareOfferPreview() {
                 <p><strong>Geçerlilik:</strong> 15 Gün</p>
             </div>
         </div>
-        <table style="width:100%; border-collapse:collapse; margin-bottom:2rem;">
-            <thead>
-                <tr style="background:#f3f4f6;">
-                    <th style="padding:0.5rem; text-align:left;">Resim</th>
-                    <th style="text-align:left; padding:0.5rem;">Kod</th>
-                    <th style="text-align:left; padding:0.5rem;">Açıklama</th>
-                    <th style="text-align:left; padding:0.5rem;">Miktar</th>
-                    <th style="text-align:left; padding:0.5rem;">Birim Fiyat</th>
-                    ${hasAnyDiscount ? '<th style="text-align:left; padding:0.5rem;">İndirim</th>' : ''}
-                    <th style="text-align:left; padding:0.5rem;">Toplam</th>
-                </tr>
-            </thead>
-            <tbody>
-                ${wizardState.items.map(i => {
+        <div id="offerItemsContainer" style="width: 100%;">
+            ${Object.keys(itemsByCategory).map(catName => `
+                <div style="margin-bottom: 2rem; break-inside: avoid; page-break-inside: avoid; display: block; width: 100%;">
+                    <h3 style="background: #f8fafc; padding: 0.4rem 0.8rem; border-left: 4px solid var(--primary); margin-bottom: 0.5rem; font-size: 0.9rem; page-break-after: avoid;">${catName}</h3>
+                    <table style="width:100%; border-collapse:collapse; margin-bottom:1rem;">
+                        <thead>
+                            <tr style="background:#f3f4f6; font-size: 0.8rem;">
+                                <th style="padding:0.4rem; text-align:left; width: 60px;">Resim</th>
+                                <th style="text-align:left; padding:0.4rem; width: 110px;">Kod</th>
+                                <th style="text-align:left; padding:0.4rem;">Açıklama</th>
+                                <th style="text-align:left; padding:0.4rem; width: 70px;">Miktar</th>
+                                <th style="text-align:left; padding:0.4rem; width: 110px;">Birim Fiyat</th>
+                                ${hasAnyDiscount ? '<th style="text-align:left; padding:0.4rem; width: 70px;">İndirim</th>' : ''}
+                                <th style="text-align:left; padding:0.4rem; width: 110px;">Toplam</th>
+                            </tr>
+                        </thead>
+                        <tbody style="font-size: 0.8rem;">
+                            ${itemsByCategory[catName].map(i => {
         const lineTotal = i.quantity * i.price * (1 - i.discount / 100);
         const symbol = getCurrencySymbol(i.currency);
         const imgUrl = i.imageUrl ? (i.imageUrl.startsWith('http') ? i.imageUrl : API_BASE_URL + '/' + i.imageUrl) : '';
         return `<tr>
-                        <td style="padding:0.5rem; border-bottom:1px solid #eee;">
-                            ${imgUrl ? `<img src="${imgUrl}" style="width:50px; height:50px; object-fit:contain;">` : '-'}
-                        </td>
-                        <td style="padding:0.5rem; border-bottom:1px solid #eee;">${i.code}</td>
-                        <td style="padding:0.5rem; border-bottom:1px solid #eee;">${i.name}</td>
-                        <td style="padding:0.5rem; border-bottom:1px solid #eee;">${i.quantity} ${i.unit}</td>
-                        <td style="padding:0.5rem; border-bottom:1px solid #eee;">${formatMoney(i.price)} ${symbol}</td>
-                        ${hasAnyDiscount ? `<td style="padding:0.5rem; border-bottom:1px solid #eee;">%${i.discount}</td>` : ''}
-                        <td style="padding:0.5rem; border-bottom:1px solid #eee;">${formatMoney(lineTotal)} ${symbol}</td>
-                    </tr>`;
+                                    <td style="padding:0.4rem; border-bottom:1px solid #444;">
+                                        ${imgUrl ? `<img src="${imgUrl}" style="width:40px; height:40px; object-fit:contain;">` : '-'}
+                                    </td>
+                                    <td style="padding:0.4rem; border-bottom:1px solid #444;">${i.code}</td>
+                                    <td style="padding:0.4rem; border-bottom:1px solid #444;">${i.name}</td>
+                                    <td style="padding:0.4rem; border-bottom:1px solid #444;">${i.quantity} ${i.unit}</td>
+                                    <td style="padding:0.4rem; border-bottom:1px solid #444;">${formatMoney(i.price)} ${symbol}</td>
+                                    ${hasAnyDiscount ? `<td style="padding:0.4rem; border-bottom:1px solid #444;">%${i.discount}</td>` : ''}
+                                    <td style="padding:0.4rem; border-bottom:1px solid #444;">${formatMoney(lineTotal)} ${symbol}</td>
+                                </tr>`;
     }).join('')}
-            </tbody>
-        </table>
-        <div style="display:flex; justify-content:flex-end;">
-            <div style="width:300px;">
-                <div style="display:flex; justify-content:space-between;"><span>Ara Toplam:</span> <span>${formatMoney(subTotal)} ${globalSymbol}</span></div>
-                <div style="display:flex; justify-content:space-between;"><span>KDV (%20):</span> <span>${formatMoney(vat)} ${globalSymbol}</span></div>
-                <div style="display:flex; justify-content:space-between; font-weight:bold; margin-top:0.5rem; border-top:2px solid #333; padding-top:0.5rem;">
+                        </tbody>
+                    </table>
+                </div>
+            `).join('')}
+        </div>
+        <div style="display:flex; justify-content:flex-end; margin-top: 2rem; break-inside: avoid; page-break-inside: avoid; border-top: 1px solid #444; padding-top: 1rem;">
+            <div style="width:320px; border: 2px solid #333; padding: 1rem; border-radius: 4px; background: #fdfdfd;">
+                <div style="display:flex; justify-content:space-between; margin-bottom: 0.4rem;"><span>Ara Toplam:</span> <span>${formatMoney(subTotal)} ${globalSymbol}</span></div>
+                <div style="display:flex; justify-content:space-between; margin-bottom: 0.4rem;"><span>KDV (%20):</span> <span>${formatMoney(vat)} ${globalSymbol}</span></div>
+                <div style="display:flex; justify-content:space-between; font-weight:bold; margin-top:0.6rem; border-top:2px solid #333; padding-top:0.6rem; font-size: 1.1rem; color: #000;">
                     <span>GENEL TOPLAM:</span> <span>${formatMoney(grandTotal)} ${globalSymbol}</span>
                 </div>
             </div>
@@ -3619,17 +4420,44 @@ window.downloadOffer = function (type) {
     const area = document.getElementById('offerPreviewArea');
     if (type === 'pdf') {
         const win = window.open('', '_blank');
-        win.document.write(`<html><head><title>Teklif</title><style>body{font-family:sans-serif; padding:20px;}</style></head><body>${area.innerHTML}</body></html>`);
+        win.document.write(`
+            <html>
+            <head>
+                <title>Teklif Formu</title>
+                <style>
+                    body { font-family: sans-serif; padding: 20px; font-size: 0.85rem; }
+                    .offer-preview-content { width: 100%; }
+                    table { page-break-inside: auto; }
+                    tr { page-break-inside: avoid; page-break-after: auto; }
+                    thead { display: table-header-group; }
+                    tfoot { display: table-footer-group; }
+                    @page { margin: 1.5cm; }
+                </style>
+            </head>
+            <body>
+                <div class="offer-preview-content">${area.innerHTML}</div>
+            </body>
+            </html>
+        `);
         win.document.close();
         win.print();
     } else {
         const hasAnyDiscount = wizardState.items.some(i => i.discount > 0);
-        let csv = `Resim,Kod,Aciklama,Miktar,Birim Fiyat${hasAnyDiscount ? ',Indirim' : ''},Toplam\n`;
-        wizardState.items.forEach(i => {
-            const imgUrl = i.imageUrl ? (i.imageUrl.startsWith('http') ? i.imageUrl : API_BASE_URL + '/' + i.imageUrl) : '';
-            csv += `\"${imgUrl}\",\"${i.code}\",\"${i.name}\",\"${i.quantity}\",\"${i.price}\"${hasAnyDiscount ? ',\"' + i.discount + '\"' : ''},\"${i.quantity * i.price * (1 - i.discount / 100)}\"\n`;
+        const itemsByCategory = wizardState.items.reduce((groups, item) => {
+            const cat = item.categoryName || 'Diğer';
+            if (!groups[cat]) groups[cat] = [];
+            groups[cat].push(item);
+            return groups;
+        }, {});
+
+        let csv = `Kategori,Resim,Kod,Aciklama,Miktar,Birim Fiyat${hasAnyDiscount ? ',Indirim' : ''},Toplam\n`;
+        Object.keys(itemsByCategory).forEach(catName => {
+            itemsByCategory[catName].forEach(i => {
+                const imgUrl = i.imageUrl ? (i.imageUrl.startsWith('http') ? i.imageUrl : API_BASE_URL + '/' + i.imageUrl) : '';
+                csv += `\"${catName}\",\"${imgUrl}\",\"${i.code}\",\"${i.name}\",\"${i.quantity}\",\"${i.price}\"${hasAnyDiscount ? ',\"' + i.discount + '\"' : ''},\"${i.quantity * i.price * (1 - i.discount / 100)}\"\n`;
+            });
         });
-        const blob = new Blob([csv], { type: 'text/csv' });
+        const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
         const url = window.URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
@@ -3647,7 +4475,7 @@ window.sendOfferByEmail = async function () {
     const fullHtml = `
         <html>
         <body style="font-family: Arial, sans-serif; padding: 20px; line-height: 1.6;">
-            <div style="max-width: 800px; margin: 0 auto; border: 1px solid #eee; padding: 30px; border-radius: 10px;">
+            <div style="max-width: 800px; margin: 0 auto; border: 1px solid #eee; padding: 30px; border-radius: 10px; font-size: 0.85rem;">
                 ${previewHtml}
                 <div style="margin-top: 30px; border-top: 1px solid #eee; padding-top: 15px; color: #666; font-size: 0.85rem;">
                     <p>Bu teklif <strong>S2O1 Sistemi</strong> üzerinden oluşturulmuştur.</p>
@@ -3686,7 +4514,8 @@ window.loadShelves = async function () {
     if (!tbody) return;
     tbody.innerHTML = '<tr><td colspan="4">Yükleniyor...</td></tr>';
     try {
-        const res = await fetch(`${API_BASE_URL}/api/warehouse/shelves`);
+        const filter = window.currentStatusFilter['shelves'] || 'active';
+        const res = await fetch(`${API_BASE_URL}/api/warehouse/shelves?status=${filter}`);
         const shelves = await res.json();
         tbody.innerHTML = '';
         shelves.forEach(s => {
@@ -3696,7 +4525,10 @@ window.loadShelves = async function () {
                 <td>${s.name}</td>
                 <td>${s.description || '-'}</td>
                 <td style="text-align:right;">
-                    <button class="btn-action btn-delete" onclick="deleteShelf(${s.id})">Sil</button>
+                    <div class="action-btn-container">
+                        ${!s.isDeleted ? `<button class="btn-action btn-delete" onclick="deleteShelf(${s.id})">Sil</button>` : ''}
+                        ${s.isDeleted && window.hasPermission('ShowDeletedItems', 'write') ? `<button class="btn-action" style="background:#10b981;" onclick="restoreEntity('shelf', ${s.id})">✅ Geri Yükle</button>` : ''}
+                    </div>
                 </td>
             `;
             tbody.appendChild(tr);
@@ -3795,9 +4627,12 @@ window.assignJob = async function (id) {
     const user = JSON.parse(localStorage.getItem('user'));
     try {
         const res = await fetch(`${API_BASE_URL}/api/invoice/${id}/assign?userId=${user.id}`, { method: 'POST' });
-        if (res.ok) loadPendingDeliveries();
-        else alert('Atama başarısız.');
-    } catch (e) { alert(e.message); }
+        if (res.ok) {
+            showToast('Görev atandı');
+            loadPendingDeliveries();
+        }
+        else showToast('Atama başarısız', 'error');
+    } catch (e) { showToast(e.message, 'error'); }
 };
 
 let prepState = {
@@ -3807,18 +4642,31 @@ let prepState = {
 
 window.openPrepModal = async function (id) {
     try {
-        const res = await fetch(`${API_BASE_URL}/api/invoice/${id}`);
+        const res = await fetch(`${API_BASE_URL}/api/invoice/${id}?t=` + Date.now());
+        if (res.status === 403) {
+            showToast('Bu işlem için yetkiniz bulunmuyor', 'error');
+            return;
+        }
+        if (!res.ok) {
+            showToast('Fatura bilgileri yüklenemedi', 'error');
+            return;
+        }
         const inv = await res.json();
+        if (!inv || !inv.items) {
+            showToast('Fatura ürün listesi alınamadı', 'error');
+            return;
+        }
         prepState.invoice = inv;
         prepState.basket = inv.items.map(it => ({ ...it, picked: 0, checked: it.includeInDispatch }));
 
         document.getElementById('prepModalTitle').innerText = `📦 Sevkiyat Hazırlama: #${inv.invoiceNumber}`;
         document.getElementById('prepDeliverer').value = inv.assignedDelivererUserName || '';
         document.getElementById('prepReceiver').value = '';
+
         renderPrepBasket();
         document.getElementById('warehousePrepModal').style.display = 'flex';
         setTimeout(() => document.getElementById('prepBarcodeScan').focus(), 300);
-    } catch (e) { alert(e.message); }
+    } catch (e) { showToast('Hazırlama başlatılamadı: ' + e.message, 'error'); }
 };
 
 function renderPrepBasket() {
@@ -3847,6 +4695,16 @@ function renderPrepBasket() {
         `;
         tbody.appendChild(tr);
     });
+
+    const dataList = document.getElementById('prepManualOptions');
+    if (dataList) {
+        dataList.innerHTML = '';
+        prepState.basket.forEach((it) => {
+            if (it.picked < it.quantity) {
+                dataList.innerHTML += `<option value="${it.productCode}">${it.productName} (Kalan: ${it.quantity - it.picked})</option>`;
+            }
+        });
+    }
 }
 
 window.prepScanItem = function () {
@@ -3859,7 +4717,34 @@ window.prepScanItem = function () {
         prepAddItem(index);
         document.getElementById('prepBarcodeScan').value = '';
     } else {
-        alert('Ürün bu siparişte bulunamadı: ' + val);
+        showToast('Ürün bu siparişte bulunamadı: ' + val, 'warning');
+    }
+};
+
+window.prepAddManualItem = function () {
+    const el = document.getElementById('prepManualSelect');
+    if (!el) return;
+    const val = el.value.trim().toLowerCase();
+    if (!val) {
+        alert('Lütfen eklenecek ürünü seçin veya arayın.');
+        return;
+    }
+
+    const index = prepState.basket.findIndex(it =>
+        (it.productCode && it.productCode.toLowerCase() === val) ||
+        (it.productName && it.productName.toLowerCase() === val)
+    );
+
+    if (index !== -1) {
+        if (prepState.basket[index].picked < prepState.basket[index].quantity) {
+            prepAddItem(index);
+            el.value = '';
+        } else {
+            alert('Bu ürünün zaten tamamı eklendi.');
+            el.value = '';
+        }
+    } else {
+        showToast('Ürün bulunamadı', 'warning');
     }
 };
 
@@ -3869,13 +4754,13 @@ window.prepAddItem = function (index) {
         item.picked++;
         renderPrepBasket();
     } else {
-        alert('Bu üründen istenen miktardan fazlasını ekleyemezsiniz.');
+        showToast('İstenen miktardan fazlasını ekleyemezsiniz', 'warning');
     }
 };
 
 window.completePrep = async function () {
     const receiver = document.getElementById('prepReceiver').value.trim();
-    if (!receiver) return alert('Lütfen teslim alan kişi adını giriniz.');
+    if (!receiver) return showToast('Lütfen teslim alan kişi adını giriniz', 'warning');
 
     // Check if everything is picked
     const missing = prepState.basket.filter(it => it.picked < it.quantity);
@@ -3897,13 +4782,251 @@ window.completePrep = async function () {
             body: JSON.stringify(dto)
         });
         if (res.ok) {
-            alert('Sevkiyat başarıyla tamamlandı, irsaliye oluşturuldu ve stoklar düşüldü. ✅');
             closeModal('warehousePrepModal');
             loadPendingDeliveries();
+
+            // Show action modal instead of just alert
+            document.getElementById('dispatchActionModal').style.display = 'flex';
         } else {
             const err = await res.text();
-            alert('Tamamlanamadı: ' + err);
+            showToast('Tamamlanamadı: ' + err, 'error');
         }
-    } catch (e) { alert(e.message); }
+    } catch (e) { showToast(e.message, 'error'); }
 };
 
+window.generateDispatchHtml = function () {
+    if (!prepState.invoice) return "";
+
+    const inv = prepState.invoice;
+    const delivererName = document.getElementById('prepDeliverer').value || inv.assignedDelivererUserName || 'Bilinmiyor';
+    const receiverName = document.getElementById('prepReceiver').value || inv.buyerCompanyName || 'Bilinmiyor';
+
+    // Only items that are in the prep basket and were actually included
+    const pickedItems = prepState.basket.filter(item => item.checked && item.picked > 0);
+
+    let itemsHtml = '';
+    pickedItems.forEach(i => {
+        itemsHtml += `
+            <tr style="border-bottom: 1px solid #e2e8f0;">
+                <td style="padding: 10px; text-align: left;">${i.productCode || '-'}</td>
+                <td style="padding: 10px; text-align: left;">${i.productName || '-'}</td>
+                <td style="padding: 10px; text-align: left;">Adet</td>
+                <td style="padding: 10px; text-align: right;">${i.picked.toFixed(2)}</td>
+            </tr>
+        `;
+    });
+
+    return `
+        <div style="font-family: Arial, sans-serif; max-width: 800px; margin: 0 auto; color: #1e293b;">
+            <div style="display: flex; justify-content: space-between; margin-bottom: 2rem; border-bottom: 2px solid #e2e8f0; padding-bottom: 1rem;">
+                <div>
+                    <h2 style="margin: 0; color: #0f172a;">SEVK İRSALİYESİ</h2>
+                    <p style="margin: 5px 0 0 0; color: #64748b;"><strong>Firma/Müşteri:</strong> ${inv.buyerCompanyName || '-'}</p>
+                </div>
+                <div style="text-align: right;">
+                    <p style="margin: 0;"><strong>Tarih:</strong> ${new Date().toLocaleDateString('tr-TR')}</p>
+                    <p style="margin: 5px 0 0 0;"><strong>Evrak No:</strong> ${inv.invoiceNumber || '-'}</p>
+                </div>
+            </div>
+            
+            <table style="width: 100%; border-collapse: collapse; margin-bottom: 3rem;">
+                <thead>
+                    <tr style="background-color: #f8fafc; border-bottom: 2px solid #cbd5e1;">
+                        <th style="padding: 12px 10px; text-align: left; width: 20%;">Kod</th>
+                        <th style="padding: 12px 10px; text-align: left; width: 50%;">Açıklama</th>
+                        <th style="padding: 12px 10px; text-align: left; width: 15%;">Birim</th>
+                        <th style="padding: 12px 10px; text-align: right; width: 15%;">Miktar</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${itemsHtml}
+                </tbody>
+            </table>
+            
+            <div style="display: flex; justify-content: space-between; margin-top: 4rem; padding-top: 2rem; border-top: 1px solid #e2e8f0;">
+                <div style="text-align: center; width: 40%;">
+                    <h4 style="margin: 0 0 10px 0;">Teslim Eden</h4>
+                    <p style="margin: 0;">${delivererName}</p>
+                    <div style="margin-top: 30px; border-top: 1px solid #1e293b; width: 80%; margin-left: auto; margin-right: auto;">İmza</div>
+                </div>
+                <div style="text-align: center; width: 40%;">
+                    <h4 style="margin: 0 0 10px 0;">Teslim Alan</h4>
+                    <p style="margin: 0;">${receiverName}</p>
+                    <div style="margin-top: 30px; border-top: 1px solid #1e293b; width: 80%; margin-left: auto; margin-right: auto;">İmza</div>
+                </div>
+            </div>
+        </div>
+    `;
+};
+
+// Version accepting raw data (used by downloadWaybillPdf)
+window.generateDispatchHtmlFromData = function (items, buyerName, buyerAddress, sysInfo, meta) {
+    const delivererName = (meta && meta.assignedUser) || '';
+    const receiverName = (meta && meta.receiverName) || buyerName || 'Bilinmiyor';
+    const invoiceNumber = (meta && meta.invoiceNumber) || '-';
+    const date = (meta && meta.date) || new Date().toLocaleDateString('tr-TR');
+    const buyerTax = (meta && meta.buyerCompanyTaxInfo) || '';
+    const companyName = (sysInfo && sysInfo.companyName) || '';
+    const companyAddress = (sysInfo && sysInfo.address) || '';
+
+    let itemsHtml = '';
+    (items || []).forEach((i, idx) => {
+        itemsHtml += `
+            <tr style="border-bottom:1px solid #e2e8f0; background:${idx % 2 === 0 ? '#fff' : '#f8fafc'}">
+                <td style="padding:10px; text-align:left;">${i.productCode || '-'}</td>
+                <td style="padding:10px; text-align:left;">${i.productName || '-'}</td>
+                <td style="padding:10px; text-align:left;">Adet</td>
+                <td style="padding:10px; text-align:right;">${parseFloat(i.quantity || 0).toFixed(2)}</td>
+            </tr>
+        `;
+    });
+
+    return `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Sevk İrsaliyesi - ${invoiceNumber}</title>
+    <style>body{font-family:Arial,sans-serif;color:#1e293b;margin:0;padding:20px;}table{border-collapse:collapse;width:100%;}@media print{body{padding:0;}}</style>
+    </head><body>
+        <div style="max-width:800px;margin:0 auto;">
+            <div style="display:flex;justify-content:space-between;margin-bottom:1.5rem;border-bottom:2px solid #e2e8f0;padding-bottom:1rem;align-items:flex-start;">
+                <div>
+                    <h2 style="margin:0;color:#0f172a;font-size:1.4rem;">SEVKİYAT İRSALİYESİ</h2>
+                    <p style="margin:6px 0 2px 0;font-size:0.9rem;color:#475569;"><strong>Gönderen:</strong> ${companyName}</p>
+                    ${companyAddress ? `<p style="margin:2px 0;font-size:0.85rem;color:#64748b;">${companyAddress}</p>` : ''}
+                </div>
+                <div style="text-align:right;font-size:0.9rem;">
+                    <p style="margin:0;"><strong>Evrak No:</strong> ${invoiceNumber}</p>
+                    <p style="margin:5px 0 0 0;"><strong>Tarih:</strong> ${date}</p>
+                </div>
+            </div>
+            <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px;padding:1rem;margin-bottom:1.5rem;">
+                <p style="margin:0;font-size:0.8rem;color:#64748b;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;">Alıcı Firma</p>
+                <p style="margin:4px 0 0 0;font-weight:700;">${buyerName}</p>
+                ${buyerAddress ? `<p style="margin:2px 0;font-size:0.85rem;color:#475569;">${buyerAddress}</p>` : ''}
+                ${buyerTax ? `<p style="margin:2px 0;font-size:0.85rem;color:#475569;">Vergi / İletişim: ${buyerTax}</p>` : ''}
+            </div>
+            <table>
+                <thead>
+                    <tr style="background-color:#1e293b;color:white;">
+                        <th style="padding:10px;text-align:left;width:20%;">Ürün Kodu</th>
+                        <th style="padding:10px;text-align:left;width:50%;">Ürün Adı</th>
+                        <th style="padding:10px;text-align:left;width:15%;">Birim</th>
+                        <th style="padding:10px;text-align:right;width:15%;">Miktar</th>
+                    </tr>
+                </thead>
+                <tbody>${itemsHtml}</tbody>
+            </table>
+            <div style="display:flex;justify-content:space-between;margin-top:4rem;padding-top:1.5rem;border-top:1px solid #e2e8f0;">
+                <div style="text-align:center;width:40%;">
+                    <h4 style="margin:0 0 8px 0;">Teslim Eden</h4>
+                    <p style="margin:0;">${delivererName}</p>
+                    <div style="margin-top:40px;border-top:1px solid #1e293b;padding-top:4px;font-size:0.85rem;color:#64748b;">İmza</div>
+                </div>
+                <div style="text-align:center;width:40%;">
+                    <h4 style="margin:0 0 8px 0;">Teslim Alan</h4>
+                    <p style="margin:0;">${receiverName}</p>
+                    <div style="margin-top:40px;border-top:1px solid #1e293b;padding-top:4px;font-size:0.85rem;color:#64748b;">İmza</div>
+                </div>
+            </div>
+        </div>
+    </body></html>`;
+};
+
+window.printDispatch = function () {
+    const html = generateDispatchHtml();
+    const win = window.open('', '_blank');
+    win.document.write(`<html><head><title>Sevk İrsaliyesi</title></head><body onload="window.print()">${html}</body></html>`);
+    win.document.close();
+    closeModal('dispatchActionModal');
+};
+
+window.downloadDispatch = function () {
+    const html = generateDispatchHtml();
+    const win = window.open('', '_blank');
+    win.document.write(`<html><head><title>Sevk İrsaliyesi</title></head><body onload="window.print()">${html}</body></html>`);
+    win.document.close();
+    closeModal('dispatchActionModal');
+};
+
+window.emailDispatch = function () {
+    // Placeholder implementation for emailing dispatch note
+    const receiver = prepState.invoice?.buyerCompanyName || 'Müşteri';
+    showToast(receiver + ' yetkilisine irsaliye maili gönderildi');
+    closeModal('dispatchActionModal');
+};
+
+// --- SCANNER MODAL LOGIC ---
+let html5QrcodeScanner = null;
+let currentScannerTargetId = null;
+let currentScannerCallback = null;
+
+window.openScanner = function (targetInputId, callback) {
+    document.getElementById('scannerModal').style.display = 'flex';
+    currentScannerTargetId = targetInputId;
+    currentScannerCallback = callback;
+
+    if (!html5QrcodeScanner) {
+        html5QrcodeScanner = new Html5QrcodeScanner(
+            "reader", { fps: 10, qrbox: 250 });
+    }
+
+    html5QrcodeScanner.render(onScanSuccess, onScanError);
+}
+
+window.closeScanner = function () {
+    document.getElementById('scannerModal').style.display = 'none';
+    if (html5QrcodeScanner) {
+        html5QrcodeScanner.clear().catch(error => {
+            console.error("Failed to clear html5QrcodeScanner. ", error);
+        });
+    }
+}
+
+function onScanSuccess(decodedText, decodedResult) {
+    closeScanner();
+    if (currentScannerTargetId) {
+        const input = document.getElementById(currentScannerTargetId);
+        if (input) {
+            input.value = decodedText;
+        }
+    }
+    if (currentScannerCallback && typeof currentScannerCallback === 'function') {
+        currentScannerCallback();
+    }
+}
+
+function onScanError(errorMessage) {
+    // suppress errors (it fires frequently)
+}
+
+// --- WIZARD PRODUCT SEARCH & SCAN ---
+window.filterWizardProducts = function () {
+    const term = document.getElementById('wizardProductSearch').value.toLowerCase();
+    const rows = document.querySelectorAll('#wizardProductList tr');
+    rows.forEach(row => {
+        if (row.id && row.id.startsWith('wizard-row-')) {
+            const text = row.innerText.toLowerCase();
+            row.style.display = text.includes(term) ? '' : 'none';
+        }
+    });
+}
+
+window.scanWizardProduct = function () {
+    const term = document.getElementById('wizardProductSearch').value.trim().toLowerCase();
+    if (!term) return;
+
+    // Find product by code, system code, or exact name
+    const p = wizardState.lastLoadedProducts.find(x =>
+        (x.productCode && x.productCode.toLowerCase() === term) ||
+        (x.systemCode && x.systemCode.toLowerCase() === term) ||
+        (x.productName && x.productName.toLowerCase() === term)
+    );
+
+    if (p) {
+        const qtyInput = document.getElementById(`qty-${p.id}`);
+        if (qtyInput) {
+            addToWizardOffer(p.id);
+            document.getElementById('wizardProductSearch').value = '';
+            filterWizardProducts();
+        }
+    } else {
+        showToast("Ürün bulunamadı: " + term, 'warning');
+    }
+}

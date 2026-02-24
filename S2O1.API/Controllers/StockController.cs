@@ -51,9 +51,9 @@ namespace S2O1.API.Controllers
 
         [HttpGet("waybills/search")]
         [Filters.Permission("Stock", "Read")]
-        public async Task<IActionResult> SearchWaybills([FromQuery] string? waybillNo, [FromQuery] System.DateTime? startDate, [FromQuery] System.DateTime? endDate, [FromQuery] int? supplierId)
+        public async Task<IActionResult> SearchWaybills([FromQuery] string? waybillNo, [FromQuery] System.DateTime? startDate, [FromQuery] System.DateTime? endDate, [FromQuery] int? supplierId, [FromQuery] string? type)
         {
-            var waybills = await _stockService.SearchWaybillsAsync(waybillNo, startDate, endDate, supplierId);
+            var waybills = await _stockService.SearchWaybillsAsync(waybillNo, startDate, endDate, supplierId, type);
             return Ok(waybills);
         }
 
@@ -65,8 +65,23 @@ namespace S2O1.API.Controllers
             return Ok(waybills);
         }
 
-        [HttpGet("report")]
+        [HttpGet("waybill-items")]
         [Filters.Permission("Stock", "Read")]
+        public async Task<IActionResult> GetWaybillItems([FromQuery] string waybillNo)
+        {
+            try
+            {
+                var items = await _stockService.GetWaybillItemsAsync(waybillNo);
+                return Ok(items);
+            }
+            catch (System.Exception ex)
+            {
+                return BadRequest(new { message = ex.Message });
+            }
+        }
+
+        [HttpGet("report")]
+        [Filters.Permission(new[] { "Stock", "Reports" }, "Read")]
         public async Task<IActionResult> GetStockReport([FromQuery] int? warehouseId)
         {
             var report = await _stockService.GetWarehouseStockReportAsync(warehouseId);
@@ -74,7 +89,7 @@ namespace S2O1.API.Controllers
         }
 
         [HttpGet("product/{productId}/warehouse/{warehouseId}")]
-        [Filters.Permission("Stock", "Read")]
+        [Filters.Permission(new[] { "Stock", "Reports" }, "Read")]
         public async Task<IActionResult> GetStock(int productId, int warehouseId)
         {
             var stock = await _stockService.GetProductStockAsync(productId, warehouseId);

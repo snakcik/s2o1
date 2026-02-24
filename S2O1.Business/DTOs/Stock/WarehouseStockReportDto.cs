@@ -8,6 +8,9 @@ namespace S2O1.Business.DTOs.Stock
         public string ProductCode { get; set; }
         public string ProductName { get; set; }
         public decimal CurrentStock { get; set; }
+        public decimal ReservedStock { get; set; }
+        public decimal WaitingInWarehouseStock { get; set; }
+        public decimal AvailableStock { get; set; }
         public string UnitName { get; set; }
     }
 }

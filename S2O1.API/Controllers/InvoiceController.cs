@@ -6,7 +6,8 @@ using System.Threading.Tasks;
 
 namespace S2O1.API.Controllers
 {
-    [Route("api/[controller]")]
+    [Route("api/invoice")]
+    [Route("api/invoices")]
     [ApiController]
     public class InvoiceController : ControllerBase
     {
@@ -19,17 +20,26 @@ namespace S2O1.API.Controllers
 
         [HttpGet]
         [Filters.Permission("Invoices", "Read")]
-        public async Task<ActionResult<IEnumerable<InvoiceDto>>> GetAll()
+        public async Task<ActionResult<IEnumerable<InvoiceDto>>> GetAll([FromQuery] string? status = null)
         {
-            var result = await _invoiceService.GetAllAsync();
+            var result = await _invoiceService.GetAllAsync(status);
             return Ok(result);
         }
 
         [HttpGet("{id}")]
-        [Filters.Permission("Invoices", "Read")]
+        [Filters.Permission(new[] { "Invoices", "Warehouse" }, "Read")]
         public async Task<ActionResult<InvoiceDto>> GetById(int id)
         {
             var result = await _invoiceService.GetByIdAsync(id);
+            if (result == null) return NotFound();
+            return Ok(result);
+        }
+
+        [HttpGet("by-number/{number}")]
+        [Filters.Permission(new[] { "Invoices", "Warehouse" }, "Read")]
+        public async Task<ActionResult<InvoiceDto>> GetByNumber(string number)
+        {
+            var result = await _invoiceService.GetByNumberAsync(number);
             if (result == null) return NotFound();
             return Ok(result);
         }
@@ -49,6 +59,22 @@ namespace S2O1.API.Controllers
             var result = await _invoiceService.ApproveInvoiceAsync(id, userId);
             if (!result) return BadRequest();
             return Ok();
+        }
+
+        [HttpPost("{id}/reject")]
+        [Filters.Permission("Invoices", "Write")]
+        public async Task<IActionResult> Reject(int id)
+        {
+            try
+            {
+                var result = await _invoiceService.RejectInvoiceAsync(id);
+                if (!result) return BadRequest();
+                return Ok();
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(ex.Message);
+            }
         }
 
         [HttpGet("pending-deliveries")]
@@ -71,8 +97,15 @@ namespace S2O1.API.Controllers
         [Filters.Permission("Warehouse", "Write")]
         public async Task<IActionResult> CompleteDelivery(WarehouseDeliveryDto dto)
         {
-            var result = await _invoiceService.CompleteDeliveryAsync(dto);
-            return result ? Ok() : BadRequest();
+            try
+            {
+                var result = await _invoiceService.CompleteDeliveryAsync(dto);
+                return result ? Ok() : BadRequest();
+            }
+            catch (System.Exception ex)
+            {
+                return BadRequest(ex.Message);
+            }
         }
     }
 }

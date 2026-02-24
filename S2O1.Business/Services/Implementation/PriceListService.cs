@@ -14,21 +14,48 @@ namespace S2O1.Business.Services.Implementation
     {
         private readonly IUnitOfWork _unitOfWork;
         private readonly IMapper _mapper;
+        private readonly ICurrentUserService _currentUserService;
 
-        public PriceListService(IUnitOfWork unitOfWork, IMapper mapper)
+        public PriceListService(IUnitOfWork unitOfWork, IMapper mapper, ICurrentUserService currentUserService)
         {
             _unitOfWork = unitOfWork;
             _mapper = mapper;
+            _currentUserService = currentUserService;
         }
 
-        public async Task<IEnumerable<PriceListDto>> GetAllAsync()
+        private async Task<bool> CanSeeDeletedAsync()
         {
-            var data = await _unitOfWork.Repository<PriceList>().Query()
-                .Include(p => p.Product)
-                .Include(p => p.Supplier)
-                .Where(p => !p.IsDeleted)
-                .ToListAsync();
+            if (_currentUserService.IsRoot) return true;
+            return await _unitOfWork.Repository<UserPermission>().Query()
+                .Include(p => p.Module)
+                .AnyAsync(p => p.UserId == _currentUserService.UserId && 
+                               p.Module.ModuleName == "ShowDeletedItems" && 
+                               (p.CanRead || p.IsFull));
+        }
 
+        public async Task<IEnumerable<PriceListDto>> GetAllAsync(string? status = null)
+        {
+            var canSeeDeleted = await CanSeeDeletedAsync();
+            var query = _unitOfWork.Repository<PriceList>().Query();
+
+            if (canSeeDeleted)
+            {
+                query = query.IgnoreQueryFilters()
+                    .Include(p => p.Product)
+                    .Include(p => p.Supplier);
+                
+                if (status == "passive") query = query.Where(x => x.IsDeleted);
+                else if (status == "all") query = query.Where(x => true);
+                else query = query.Where(x => !x.IsDeleted);
+            }
+            else
+            {
+                query = query.Include(p => p.Product)
+                    .Include(p => p.Supplier)
+                    .Where(x => !x.IsDeleted);
+            }
+
+            var data = await query.OrderByDescending(x => x.Id).ToListAsync();
             return _mapper.Map<IEnumerable<PriceListDto>>(data);
         }
 
