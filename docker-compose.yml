@@ -22,6 +22,8 @@ services:
     restart: always
     ports:
       - "5267:5267"
+    volumes:
+      - ./web/uploads:/app/web/uploads
     environment:
       ConnectionStrings__DockerConnection: "Server=db;Database=2S1O;User Id=sa;Password=Q1w2e3r4!;Encrypt=True;TrustServerCertificate=True;"
       ASPNETCORE_ENVIRONMENT: "Production"
