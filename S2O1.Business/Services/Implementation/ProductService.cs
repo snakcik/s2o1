@@ -128,7 +128,7 @@ namespace S2O1.Business.Services.Implementation
                                (p.CanRead || p.IsFull));
         }
 
-        public async Task<System.Collections.Generic.IEnumerable<ProductDto>> GetAllAsync(string? status = null, string? searchTerm = null)
+        public async Task<S2O1.Business.DTOs.Common.PagedResultDto<ProductDto>> GetAllAsync(string? status = null, string? searchTerm = null, int page = 1, int pageSize = 10)
         {
             var canSeeDeleted = await CanSeeDeletedAsync();
             IQueryable<Product> query = _unitOfWork.Repository<Product>().Query();
@@ -143,7 +143,7 @@ namespace S2O1.Business.Services.Implementation
             else
             {
                 // If can't see deleted, return empty if "passive" was requested
-                if (status == "passive") return new List<ProductDto>();
+                if (status == "passive") return new S2O1.Business.DTOs.Common.PagedResultDto<ProductDto>();
                 query = query.Where(p => !p.IsDeleted);
             }
             
@@ -160,6 +160,8 @@ namespace S2O1.Business.Services.Implementation
                 );
             }
 
+            var totalCount = await query.CountAsync();
+            
             var products = await query
                 .Include(p => p.Unit)
                 .Include(p => p.Category)
@@ -168,6 +170,8 @@ namespace S2O1.Business.Services.Implementation
                 .Include(p => p.PriceLists)
                 .Include(p => p.Shelf)
                 .OrderByDescending(p => p.Id)
+                .Skip((page - 1) * pageSize)
+                .Take(pageSize)
                 .ToListAsync();
 
             var reserved = await _unitOfWork.Repository<OfferItem>().Query()
@@ -177,12 +181,19 @@ namespace S2O1.Business.Services.Implementation
                 .Select(g => new { ProductId = g.Key, Reserved = g.Sum(x => x.Quantity) })
                 .ToListAsync();
 
-            var result = _mapper.Map<System.Collections.Generic.IEnumerable<ProductDto>>(products);
-            foreach (var p in result)
+            var mappedItems = _mapper.Map<System.Collections.Generic.IEnumerable<ProductDto>>(products);
+            foreach (var p in mappedItems)
             {
                 p.ReservedStock = reserved.FirstOrDefault(r => r.ProductId == p.Id)?.Reserved ?? 0;
             }
-            return result;
+            
+            return new S2O1.Business.DTOs.Common.PagedResultDto<ProductDto>
+            {
+                Items = mappedItems,
+                TotalCount = totalCount,
+                PageNumber = page,
+                PageSize = pageSize
+            };
         }
 
         public async Task<System.Collections.Generic.IEnumerable<S2O1.Business.DTOs.Stock.BrandDto>> GetAllBrandsAsync(string? status = null, string? searchTerm = null)

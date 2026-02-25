@@ -17,9 +17,10 @@ window.openTitleModal = async function (id) {
     if (companySelect) {
         companySelect.innerHTML = '<option value="">Yükleniyor...</option>';
         try {
-            const res = await fetch(`${API_BASE_URL}/api/companies`);
+            const res = await fetch(`${API_BASE_URL}/api/companies?pageSize=500`);
             if (res.ok) {
-                const companies = await res.json();
+                const pagedData = await res.json();
+                const companies = pagedData.items || [];
                 companySelect.innerHTML = '<option value="">Şirket Seçin...</option>';
                 companies.forEach(c => {
                     companySelect.innerHTML += `<option value="${c.id}">${c.companyName}</option>`;
@@ -96,12 +97,13 @@ window.loadTitles = async function () {
     try {
         const [titlesRes, companiesRes] = await Promise.all([
             fetch(`${API_BASE_URL}/api/users/titles`),
-            fetch(`${API_BASE_URL}/api/companies`)
+            fetch(`${API_BASE_URL}/api/companies?pageSize=500`)
         ]);
 
         if (titlesRes.ok && companiesRes.ok) {
             const titles = await titlesRes.json();
-            const companies = await companiesRes.json();
+            const pagedCompanies = await companiesRes.json();
+            const companies = pagedCompanies.items || [];
             const companyMap = {};
             companies.forEach(c => companyMap[c.id] = c.companyName);
 

@@ -34,6 +34,7 @@ namespace S2O1.Domain.Enums
         Approved = 5,
         WaitingForWarehouse = 6,
         InPreparation = 7,
-        Delivered = 8
+        Delivered = 8,
+        PartiallyDelivered = 9
     }
 }

@@ -19,9 +19,9 @@ namespace S2O1.API.Controllers
 
         [HttpGet]
         [Filters.Permission(new[] { "PriceList", "Offers" }, "Read")]
-        public async Task<ActionResult<IEnumerable<PriceListDto>>> GetAll([FromQuery] string? status = null)
+        public async Task<IActionResult> GetAll([FromQuery] string? status = null, [FromQuery] string? searchTerm = null, [FromQuery] int page = 1, [FromQuery] int pageSize = 10)
         {
-            var data = await _priceListService.GetAllAsync(status);
+            var data = await _priceListService.GetAllAsync(status, searchTerm, page, pageSize);
             return Ok(data);
         }
 

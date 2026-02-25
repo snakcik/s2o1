@@ -66,9 +66,9 @@ namespace S2O1.API.Controllers
 
         [HttpGet]
         [Filters.Permission(new[] { "Product", "Offers" }, "Read")]
-        public async Task<IActionResult> GetAll([FromQuery] string? status = null, [FromQuery] string? searchTerm = null)
+        public async Task<IActionResult> GetAll([FromQuery] string? status = null, [FromQuery] string? searchTerm = null, [FromQuery] int page = 1, [FromQuery] int pageSize = 10)
         {
-            var p = await _productService.GetAllAsync(status, searchTerm);
+            var p = await _productService.GetAllAsync(status, searchTerm, page, pageSize);
             return Ok(p);
         }
 

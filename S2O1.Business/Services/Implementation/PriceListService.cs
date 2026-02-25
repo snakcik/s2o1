@@ -33,7 +33,7 @@ namespace S2O1.Business.Services.Implementation
                                (p.CanRead || p.IsFull));
         }
 
-        public async Task<IEnumerable<PriceListDto>> GetAllAsync(string? status = null)
+        public async Task<S2O1.Business.DTOs.Common.PagedResultDto<PriceListDto>> GetAllAsync(string? status = null, string? searchTerm = null, int page = 1, int pageSize = 10)
         {
             var canSeeDeleted = await CanSeeDeletedAsync();
             var query = _unitOfWork.Repository<PriceList>().Query();
@@ -55,8 +55,27 @@ namespace S2O1.Business.Services.Implementation
                     .Where(x => !x.IsDeleted);
             }
 
-            var data = await query.OrderByDescending(x => x.Id).ToListAsync();
-            return _mapper.Map<IEnumerable<PriceListDto>>(data);
+            if (!string.IsNullOrWhiteSpace(searchTerm))
+            {
+                var search = searchTerm.ToLower();
+                query = query.Where(x => x.Product.ProductName.ToLower().Contains(search) || x.Supplier.SupplierCompanyName.ToLower().Contains(search));
+            }
+
+            var totalCount = await query.CountAsync();
+            var data = await query.OrderByDescending(x => x.Id)
+                .Skip((page - 1) * pageSize)
+                .Take(pageSize)
+                .ToListAsync();
+
+            var mapped = _mapper.Map<IEnumerable<PriceListDto>>(data);
+
+            return new S2O1.Business.DTOs.Common.PagedResultDto<PriceListDto>
+            {
+                Items = mapped,
+                TotalCount = totalCount,
+                PageNumber = page,
+                PageSize = pageSize
+            };
         }
 
         public async Task<PriceListDto> GetByIdAsync(int id)

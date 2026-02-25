@@ -95,8 +95,28 @@ namespace S2O1.Domain.Entities
         public int? AssignedDelivererUserId { get; set; }
         public User? AssignedDelivererUser { get; set; }
         public string? ReceiverName { get; set; }
+
+        public DateTime? WarehouseAssignedDate { get; set; }
+        public DateTime? WarehouseCompletedDate { get; set; }
+        public DateTime? WarehouseIncompleteDate { get; set; }
         
         public ICollection<InvoiceItem> Items { get; set; }
+        public ICollection<InvoiceStatusLog> StatusLogs { get; set; }
+    }
+
+    public class InvoiceStatusLog : BaseEntity
+    {
+        public int InvoiceId { get; set; }
+        public Invoice Invoice { get; set; }
+        
+        public int? UserId { get; set; }
+        public User User { get; set; }
+        
+        public string Status { get; set; }
+        public string Action { get; set; }
+        
+        public int PreparedItemsCount { get; set; }
+        public DateTime LogDate { get; set; }
     }
 
     public class InvoiceItem : BaseEntity

@@ -20,9 +20,9 @@ namespace S2O1.API.Controllers
 
         [HttpGet]
         [Filters.Permission("Invoices", "Read")]
-        public async Task<ActionResult<IEnumerable<InvoiceDto>>> GetAll([FromQuery] string? status = null)
+        public async Task<IActionResult> GetAll([FromQuery] string? status = null, [FromQuery] string? searchTerm = null, [FromQuery] int page = 1, [FromQuery] int pageSize = 10)
         {
-            var result = await _invoiceService.GetAllAsync(status);
+            var result = await _invoiceService.GetAllAsync(status, searchTerm, page, pageSize);
             return Ok(result);
         }
 
@@ -106,6 +106,37 @@ namespace S2O1.API.Controllers
             {
                 return BadRequest(ex.Message);
             }
+        }
+
+        [HttpPost("{id}/incomplete")]
+        [Filters.Permission("Warehouse", "Write")]
+        public async Task<IActionResult> MarkAsIncomplete(int id)
+        {
+            try
+            {
+                var result = await _invoiceService.MarkAsIncompleteAsync(id);
+                return result ? Ok() : BadRequest();
+            }
+            catch (System.Exception ex)
+            {
+                return BadRequest(ex.Message);
+            }
+        }
+
+        [HttpPost("{id}/transfer")]
+        [Filters.Permission("Warehouse", "Write")]
+        public async Task<IActionResult> TransferJob(int id, [FromQuery] int toUserId)
+        {
+            var result = await _invoiceService.TransferJobAsync(id, toUserId);
+            return result ? Ok() : BadRequest();
+        }
+
+        [HttpPost("{id}/unassign")]
+        [Filters.Permission("Warehouse", "Write")]
+        public async Task<IActionResult> UnassignJob(int id)
+        {
+            var result = await _invoiceService.UnassignJobAsync(id);
+            return result ? Ok() : BadRequest();
         }
     }
 }

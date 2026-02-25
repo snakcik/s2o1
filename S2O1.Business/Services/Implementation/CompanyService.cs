@@ -33,7 +33,7 @@ namespace S2O1.Business.Services.Implementation
                                (p.CanRead || p.IsFull));
         }
 
-        public async Task<IEnumerable<CompanyDto>> GetAllAsync(string? status = null)
+        public async Task<S2O1.Business.DTOs.Common.PagedResultDto<CompanyDto>> GetAllAsync(string? status = null, string? searchTerm = null, int page = 1, int pageSize = 10)
         {
             var canSeeDeleted = await CanSeeDeletedAsync();
             var query = _unitOfWork.Repository<Company>().Query();
@@ -47,11 +47,21 @@ namespace S2O1.Business.Services.Implementation
             }
             else
             {
-                if (status == "passive") return new List<CompanyDto>();
+                if (status == "passive") return new S2O1.Business.DTOs.Common.PagedResultDto<CompanyDto>();
                 query = query.Where(x => !x.IsDeleted);
             }
 
-            var companies = await query.OrderByDescending(x => x.Id).ToListAsync();
+            if (!string.IsNullOrWhiteSpace(searchTerm))
+            {
+                var search = searchTerm.ToLower();
+                query = query.Where(x => x.CompanyName.ToLower().Contains(search) || (x.TaxNumber != null && x.TaxNumber.ToLower().Contains(search)));
+            }
+
+            var totalCount = await query.CountAsync();
+            var companies = await query.OrderByDescending(x => x.Id)
+                                       .Skip((page - 1) * pageSize)
+                                       .Take(pageSize)
+                                       .ToListAsync();
             var dtos = new List<CompanyDto>();
             foreach(var c in companies)
             {
@@ -65,7 +75,13 @@ namespace S2O1.Business.Services.Implementation
                     IsDeleted = c.IsDeleted
                 });
             }
-            return dtos;
+            return new S2O1.Business.DTOs.Common.PagedResultDto<CompanyDto>
+            {
+                Items = dtos,
+                TotalCount = totalCount,
+                PageNumber = page,
+                PageSize = pageSize
+            };
         }
 
         public async Task<CompanyDto> GetByIdAsync(int id)

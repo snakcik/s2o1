@@ -12,7 +12,7 @@ namespace S2O1.Business.Services.Interfaces
         Task<string> GenerateTokenAsync(UserDto user);
         Task<UserDto> CreateUserAsync(CreateUserDto createUserDto);
         Task<bool> AssignRoleAsync(int userId, int roleId);
-        Task<IEnumerable<UserDto>> GetAllUsersAsync(int? currentUserId = null, string? status = null);
+        Task<S2O1.Business.DTOs.Common.PagedResultDto<UserDto>> GetAllUsersAsync(int? currentUserId = null, string? status = null, string? requiredModule = null, string? searchTerm = null, int page = 1, int pageSize = 10);
         Task<IEnumerable<ModuleDto>> GetAllModulesAsync();
         Task<IEnumerable<UserPermissionDto>> GetUserPermissionsAsync(int userId);
         Task<bool> SaveUserPermissionsAsync(int userId, IEnumerable<UserPermissionDto> permissions);
@@ -22,6 +22,7 @@ namespace S2O1.Business.Services.Interfaces
         Task<UserDto?> GetUserByIdAsync(int userId);
         Task<bool> ForgotPasswordAsync(string email, string baseUrl);
         Task<bool> ResetPasswordAsync(string token, string newPassword);
+        Task<IEnumerable<RoleDto>> GetAllRolesAsync();
         
         // Title Management
         Task<IEnumerable<TitleDto>> GetAllTitlesAsync();
@@ -44,7 +45,7 @@ namespace S2O1.Business.Services.Interfaces
 
     public interface ICompanyService
     {
-        Task<IEnumerable<CompanyDto>> GetAllAsync(string? status = null);
+        Task<S2O1.Business.DTOs.Common.PagedResultDto<CompanyDto>> GetAllAsync(string? status = null, string? searchTerm = null, int page = 1, int pageSize = 10);
         Task<CompanyDto> GetByIdAsync(int id);
         Task<CompanyDto> CreateAsync(CreateCompanyDto dto);
         Task<CompanyDto> UpdateAsync(int id, CreateCompanyDto dto);
@@ -63,7 +64,7 @@ namespace S2O1.Business.Services.Interfaces
 
     public interface IWarehouseService
     {
-        Task<IEnumerable<WarehouseDto>> GetAllAsync(string? status = null, string? searchTerm = null);
+        Task<S2O1.Business.DTOs.Common.PagedResultDto<WarehouseDto>> GetAllAsync(string? status = null, string? searchTerm = null, int page = 1, int pageSize = 10);
         Task<WarehouseDto> GetByIdAsync(int id);
         Task<WarehouseDto> CreateAsync(CreateWarehouseDto dto);
         Task<WarehouseDto> UpdateAsync(UpdateWarehouseDto dto);
@@ -79,7 +80,7 @@ namespace S2O1.Business.Services.Interfaces
     public interface IProductService
     {
         Task<ProductDto> GetByIdAsync(int id);
-        Task<System.Collections.Generic.IEnumerable<ProductDto>> GetAllAsync(string? status = null, string? searchTerm = null);
+        Task<S2O1.Business.DTOs.Common.PagedResultDto<ProductDto>> GetAllAsync(string? status = null, string? searchTerm = null, int page = 1, int pageSize = 10);
         Task<ProductDto> CreateAsync(CreateProductDto dto);
         Task<System.Collections.Generic.IEnumerable<BrandDto>> GetAllBrandsAsync(string? status = null, string? searchTerm = null);
         Task<System.Collections.Generic.IEnumerable<CategoryDto>> GetAllCategoriesAsync(string? status = null, string? searchTerm = null);
@@ -105,7 +106,7 @@ namespace S2O1.Business.Services.Interfaces
     {
         Task ApproveOfferAsync(int offerId, int approverUserId);
         Task<int> CreateInvoiceFromOfferAsync(int offerId, int userId);
-        Task<IEnumerable<S2O1.Business.DTOs.Stock.OfferDto>> GetAllAsync(string? status = null);
+        Task<S2O1.Business.DTOs.Common.PagedResultDto<S2O1.Business.DTOs.Stock.OfferDto>> GetAllAsync(string? status = null, string? searchTerm = null, int page = 1, int pageSize = 10);
         Task<S2O1.Business.DTOs.Stock.OfferDto> GetByIdAsync(int id);
         Task<S2O1.Business.DTOs.Stock.OfferDto> CreateAsync(S2O1.Business.DTOs.Stock.CreateOfferDto dto);
         Task<S2O1.Business.DTOs.Stock.OfferDto> UpdateAsync(int id, S2O1.Business.DTOs.Stock.CreateOfferDto dto);
@@ -116,7 +117,7 @@ namespace S2O1.Business.Services.Interfaces
     {
         Task<InvoiceDto> GetByIdAsync(int id);
         Task<InvoiceDto> GetByNumberAsync(string invoiceNumber);
-        Task<IEnumerable<InvoiceDto>> GetAllAsync(string? status = null);
+        Task<S2O1.Business.DTOs.Common.PagedResultDto<InvoiceDto>> GetAllAsync(string? status = null, string? searchTerm = null, int page = 1, int pageSize = 10);
         Task<InvoiceDto> CreateAsync(CreateInvoiceDto dto);
         Task<bool> ApproveInvoiceAsync(int invoiceId, int approverUserId);
         Task<bool> RejectInvoiceAsync(int invoiceId);
@@ -125,11 +126,14 @@ namespace S2O1.Business.Services.Interfaces
         Task<IEnumerable<InvoiceDto>> GetPendingDeliveriesAsync();
         Task<bool> AssignToDelivererAsync(int invoiceId, int userId);
         Task<bool> CompleteDeliveryAsync(WarehouseDeliveryDto dto);
+        Task<bool> MarkAsIncompleteAsync(int invoiceId);
+        Task<bool> TransferJobAsync(int invoiceId, int toUserId);
+        Task<bool> UnassignJobAsync(int invoiceId);
     }
 
     public interface ISupplierService
     {
-        Task<IEnumerable<S2O1.Business.DTOs.Business.SupplierDto>> GetAllAsync(string? status = null);
+        Task<S2O1.Business.DTOs.Common.PagedResultDto<S2O1.Business.DTOs.Business.SupplierDto>> GetAllAsync(string? status = null, string? searchTerm = null, int page = 1, int pageSize = 10);
         Task<S2O1.Business.DTOs.Business.SupplierDto> GetByIdAsync(int id);
         Task<S2O1.Business.DTOs.Business.SupplierDto> CreateAsync(S2O1.Business.DTOs.Business.CreateSupplierDto dto);
         Task<S2O1.Business.DTOs.Business.SupplierDto> UpdateAsync(S2O1.Business.DTOs.Business.UpdateSupplierDto dto);
@@ -138,7 +142,7 @@ namespace S2O1.Business.Services.Interfaces
 
     public interface IPriceListService
     {
-        Task<IEnumerable<PriceListDto>> GetAllAsync(string? status = null);
+        Task<S2O1.Business.DTOs.Common.PagedResultDto<PriceListDto>> GetAllAsync(string? status = null, string? searchTerm = null, int page = 1, int pageSize = 10);
         Task<PriceListDto> GetByIdAsync(int id);
         Task<PriceListDto> CreateAsync(CreatePriceListDto dto);
         Task<PriceListDto> UpdateAsync(UpdatePriceListDto dto);
@@ -148,14 +152,14 @@ namespace S2O1.Business.Services.Interfaces
     public interface ICustomerService
     {
         // Customer Company
-        Task<IEnumerable<CustomerCompanyDto>> GetAllCompaniesAsync(string? status = null);
+        Task<S2O1.Business.DTOs.Common.PagedResultDto<CustomerCompanyDto>> GetAllCompaniesAsync(string? status = null, string? searchTerm = null, int page = 1, int pageSize = 10);
         Task<CustomerCompanyDto> GetCompanyByIdAsync(int id);
         Task<CustomerCompanyDto> CreateCompanyAsync(CreateCustomerCompanyDto dto);
         Task<CustomerCompanyDto> UpdateCompanyAsync(UpdateCustomerCompanyDto dto);
         Task<bool> DeleteCompanyAsync(int id);
 
         // Customer (Contact)
-        Task<IEnumerable<CustomerDto>> GetAllCustomersAsync(string? status = null);
+        Task<S2O1.Business.DTOs.Common.PagedResultDto<CustomerDto>> GetAllCustomersAsync(string? status = null, string? searchTerm = null, int page = 1, int pageSize = 10);
         Task<CustomerDto> GetCustomerByIdAsync(int id);
         Task<CustomerDto> CreateCustomerAsync(CreateCustomerDto dto);
         Task<CustomerDto> UpdateCustomerAsync(UpdateCustomerDto dto);
@@ -164,7 +168,7 @@ namespace S2O1.Business.Services.Interfaces
 
     public interface IDispatchNoteService
     {
-        Task<IEnumerable<S2O1.Business.DTOs.Logistic.DispatchNoteDto>> GetAllAsync();
+        Task<S2O1.Business.DTOs.Common.PagedResultDto<S2O1.Business.DTOs.Logistic.DispatchNoteDto>> GetAllAsync(string? searchTerm = null, int page = 1, int pageSize = 10);
         Task<S2O1.Business.DTOs.Logistic.DispatchNoteDto> GetByIdAsync(int id);
         Task<S2O1.Business.DTOs.Logistic.DispatchNoteDto> CreateAsync(S2O1.Business.DTOs.Logistic.CreateDispatchNoteDto dto);
         Task<bool> UpdateStatusAsync(int id, string status);

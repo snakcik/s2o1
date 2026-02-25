@@ -23,17 +23,35 @@ namespace S2O1.Business.Services.Implementation
             _currentUserService = currentUserService;
         }
 
-        public async Task<IEnumerable<DispatchNoteDto>> GetAllAsync()
+        public async Task<S2O1.Business.DTOs.Common.PagedResultDto<DispatchNoteDto>> GetAllAsync(string? searchTerm = null, int page = 1, int pageSize = 10)
         {
-            var data = await _unitOfWork.Repository<DispatchNote>().Query()
+            var query = _unitOfWork.Repository<DispatchNote>().Query()
                 .Include(d => d.Items).ThenInclude(i => i.Product)
                 .Include(d => d.Company)
                 .Include(d => d.Customer)
-                .Where(d => !d.IsDeleted)
-                .OrderByDescending(d => d.CreateDate)
+                .Where(d => !d.IsDeleted);
+
+            if (!string.IsNullOrWhiteSpace(searchTerm))
+            {
+                var search = searchTerm.ToLower();
+                query = query.Where(x => x.DispatchNo.ToLower().Contains(search) || x.Customer.CustomerContactPersonName.ToLower().Contains(search));
+            }
+
+            var totalCount = await query.CountAsync();
+            var data = await query.OrderByDescending(d => d.CreateDate)
+                .Skip((page - 1) * pageSize)
+                .Take(pageSize)
                 .ToListAsync();
                 
-            return _mapper.Map<IEnumerable<DispatchNoteDto>>(data);
+            var mapped = _mapper.Map<IEnumerable<DispatchNoteDto>>(data);
+
+            return new S2O1.Business.DTOs.Common.PagedResultDto<DispatchNoteDto>
+            {
+                Items = mapped,
+                TotalCount = totalCount,
+                PageNumber = page,
+                PageSize = pageSize
+            };
         }
 
         public async Task<DispatchNoteDto> GetByIdAsync(int id)

@@ -58,6 +58,7 @@ namespace S2O1.DataAccess.Contexts
         public DbSet<OfferItem> OfferItems { get; set; }
         public DbSet<Invoice> Invoices { get; set; }
         public DbSet<InvoiceItem> InvoiceItems { get; set; }
+        public DbSet<InvoiceStatusLog> InvoiceStatusLogs { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {

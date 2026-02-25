@@ -32,7 +32,7 @@ namespace S2O1.Business.Services.Implementation
                                (p.CanRead || p.IsFull));
         }
 
-        public async Task<IEnumerable<WarehouseDto>> GetAllAsync(string? status = null, string? searchTerm = null)
+        public async Task<S2O1.Business.DTOs.Common.PagedResultDto<WarehouseDto>> GetAllAsync(string? status = null, string? searchTerm = null, int page = 1, int pageSize = 10)
         {
             var query = _unitOfWork.Repository<Warehouse>().Query();
             if (await CanSeeDeletedAsync())
@@ -53,7 +53,15 @@ namespace S2O1.Business.Services.Implementation
                 query = query.Where(x => x.WarehouseName.ToLower().Contains(search));
             }
 
-            var warehouses = await query.Include(x => x.Company).OrderByDescending(x => x.Id).ToListAsync();
+            var totalCount = await query.CountAsync();
+            
+            var warehouses = await query
+                .Include(x => x.Company)
+                .OrderByDescending(x => x.Id)
+                .Skip((page - 1) * pageSize)
+                .Take(pageSize)
+                .ToListAsync();
+                
             var dtos = new List<WarehouseDto>();
             foreach (var w in warehouses)
             {
@@ -67,7 +75,14 @@ namespace S2O1.Business.Services.Implementation
                     IsDeleted = w.IsDeleted
                 });
             }
-            return dtos;
+            
+            return new S2O1.Business.DTOs.Common.PagedResultDto<WarehouseDto>
+            {
+                Items = dtos,
+                TotalCount = totalCount,
+                PageNumber = page,
+                PageSize = pageSize
+            };
         }
 
         public async Task<WarehouseDto> GetByIdAsync(int id)

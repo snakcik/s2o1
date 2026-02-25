@@ -26,10 +26,10 @@ namespace S2O1.API.Controllers
         }
 
         [HttpGet]
-        [Filters.Permission("Users", "Read")]
-        public async Task<IActionResult> GetAllUsers([FromQuery] int? creatorId, [FromQuery] string? status = null)
+        [Filters.Permission(new[] { "Users", "Warehouse", "WarehouseManagement" }, "Read")]
+        public async Task<IActionResult> GetAllUsers([FromQuery] int? creatorId, [FromQuery] string? status = null, [FromQuery] string? module = null, [FromQuery] string? searchTerm = null, [FromQuery] int page = 1, [FromQuery] int pageSize = 10)
         {
-            var users = await _authService.GetAllUsersAsync(creatorId, status);
+            var users = await _authService.GetAllUsersAsync(creatorId, status, module, searchTerm, page, pageSize);
             return Ok(users);
         }
 
@@ -39,6 +39,14 @@ namespace S2O1.API.Controllers
         {
             var modules = await _authService.GetAllModulesAsync();
             return Ok(modules);
+        }
+
+        [HttpGet("roles")]
+        [Filters.Permission("Users", "Read")]
+        public async Task<IActionResult> GetAllRoles()
+        {
+            var roles = await _authService.GetAllRolesAsync();
+            return Ok(roles);
         }
 
         [HttpGet("{userId}/permissions")]

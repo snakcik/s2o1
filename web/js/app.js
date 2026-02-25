@@ -254,6 +254,569 @@ window.closeForgotModal = function () {
     if (msg) msg.style.display = 'none';
 }
 
+// FINANCE REPORTS CODE
+let financeCharts = {};
+window.loadFinanceReports = async function () {
+    if (!window.hasPermission('FinanceReport', 'read')) {
+        showToast('Finans raporlarını görüntüleme yetkiniz yok.', 'error');
+        return;
+    }
+
+    const financeReportTypeDropdown = document.getElementById('financeReportType');
+    if (financeReportTypeDropdown && !financeReportTypeDropdown.hasAttribute('data-listener-added')) {
+        financeReportTypeDropdown.setAttribute('data-listener-added', 'true');
+        financeReportTypeDropdown.addEventListener('change', function (e) {
+            const logisticsFilters = document.getElementById('financeLogisticsFilters');
+            if (e.target.value === 'logisticsPerformance') {
+                if (logisticsFilters) logisticsFilters.style.display = 'flex';
+                // Kullanıcıları bir defaya mahsus çek
+                const userFilter = document.getElementById('financeFilterUser');
+                if (userFilter && userFilter.options.length <= 1) {
+                    fetch(`${API_BASE_URL}/api/users?pageSize=500`)
+                        .then(res => res.json())
+                        .then(pagedData => {
+                            const users = pagedData.items || [];
+                            users.forEach(u => {
+                                const opt = document.createElement('option');
+                                opt.value = u.id;
+                                opt.text = `${u.firstName} ${u.lastName} (${u.userName})`;
+                                userFilter.appendChild(opt);
+                            });
+                        }).catch(err => console.error("Kullanıcılar çekilemedi", err));
+                }
+            } else {
+                if (logisticsFilters) logisticsFilters.style.display = 'none';
+            }
+        });
+
+        // Initial trigger
+        financeReportTypeDropdown.dispatchEvent(new Event('change'));
+    }
+
+    const reportType = document.getElementById('financeReportType')?.value || 'userPerformance';
+    const startDate = document.getElementById('financeStartDate')?.value;
+    const endDate = document.getElementById('financeEndDate')?.value;
+
+    document.getElementById('report-container-userPerformance').style.display = 'none';
+    document.getElementById('report-container-profitability').style.display = 'none';
+    document.getElementById('report-container-dailyTrend').style.display = 'none';
+    document.getElementById('report-container-agingInventory').style.display = 'none';
+    if (document.getElementById('report-container-logisticsPerformance')) {
+        document.getElementById('report-container-logisticsPerformance').style.display = 'none';
+    }
+    if (document.getElementById('report-container-incompleteDeliveries')) {
+        document.getElementById('report-container-incompleteDeliveries').style.display = 'none';
+    }
+    if (document.getElementById('report-container-transferHistory')) {
+        document.getElementById('report-container-transferHistory').style.display = 'none';
+    }
+
+    document.getElementById(`report-container-${reportType}`).style.display = 'block';
+
+    let queryParams = [];
+    if (startDate) queryParams.push(`startDate=${startDate}`);
+    if (endDate) queryParams.push(`endDate=${endDate}`);
+
+    if (reportType === 'logisticsPerformance') {
+        const invNo = document.getElementById('financeFilterInvoiceNo')?.value;
+        const uId = document.getElementById('financeFilterUser')?.value;
+        if (invNo) queryParams.push(`invoiceNumber=${encodeURIComponent(invNo)}`);
+        if (uId) queryParams.push(`delivererUserId=${uId}`);
+    }
+
+    const qStr = queryParams.length > 0 ? '?' + queryParams.join('&') : '';
+
+    try {
+        if (reportType === 'userPerformance') {
+            const tbodyUsers = document.getElementById('financeReportUsersBody');
+            tbodyUsers.innerHTML = '<tr><td colspan="5" style="text-align:center;">Rapor getiriliyor...</td></tr>';
+
+            const res = await fetch(`${API_BASE_URL}/api/financereport/user-performance${qStr}`);
+            if (!res.ok) throw new Error("Rapor verileri çekilemedi. Yetkinizi kontrol edin.");
+            const usersData = await res.json();
+
+            tbodyUsers.innerHTML = '';
+            if (usersData.length === 0) {
+                tbodyUsers.innerHTML = '<tr><td colspan="5" style="text-align:center;">Data bulunamadı.</td></tr>';
+            } else {
+                usersData.forEach(r => {
+                    const tr = document.createElement('tr');
+                    tr.innerHTML = `
+                        <td>${r.userName}</td>
+                        <td>${r.totalOffersPrepared}</td>
+                        <td>${r.pendingOffersCount}</td>
+                        <td>${r.invoicedOffersCount}</td>
+                        <td>${formatMoney(r.totalOffersVolume)} ₺</td>
+                    `;
+                    tbodyUsers.appendChild(tr);
+                });
+            }
+
+            if (financeCharts['userVolume']) financeCharts['userVolume'].destroy();
+            const ctxUser = document.getElementById('chartUserVolume').getContext('2d');
+            financeCharts['userVolume'] = new Chart(ctxUser, {
+                type: 'bar',
+                data: {
+                    labels: usersData.map(u => u.userName),
+                    datasets: [{
+                        label: 'Hazırlanan Teklif Hacmi (₺)',
+                        data: usersData.map(u => u.totalOffersVolume),
+                        backgroundColor: 'rgba(59, 130, 246, 0.6)',
+                        borderColor: 'rgba(59, 130, 246, 1)',
+                        borderWidth: 1
+                    }]
+                },
+                options: { responsive: true, maintainAspectRatio: false }
+            });
+
+            if (financeCharts['conversionPie']) financeCharts['conversionPie'].destroy();
+            const ctxPie = document.getElementById('chartConversionPie').getContext('2d');
+            const totalPending = usersData.reduce((sum, u) => sum + u.pendingOffersCount, 0);
+            const totalInvoiced = usersData.reduce((sum, u) => sum + u.invoicedOffersCount, 0);
+
+            financeCharts['conversionPie'] = new Chart(ctxPie, {
+                type: 'doughnut',
+                data: {
+                    labels: ['Faturaya Dönenler', 'Bekleyen / Açık'],
+                    datasets: [{
+                        data: [totalInvoiced, totalPending],
+                        backgroundColor: ['#22c55e', '#f59e0b'],
+                    }]
+                },
+                options: { responsive: true, maintainAspectRatio: false }
+            });
+        }
+        else if (reportType === 'profitability') {
+            const tbodyProfit = document.getElementById('financeReportProfitBody');
+            tbodyProfit.innerHTML = '<tr><td colspan="5" style="text-align:center;">Rapor getiriliyor...</td></tr>';
+
+            const res = await fetch(`${API_BASE_URL}/api/financereport/profitability${qStr}`);
+            if (!res.ok) throw new Error("Rapor verileri çekilemedi.");
+            const profitData = await res.json();
+
+            tbodyProfit.innerHTML = '';
+            if (profitData.length === 0) {
+                tbodyProfit.innerHTML = '<tr><td colspan="5" style="text-align:center;">Data bulunamadı.</td></tr>';
+            } else {
+                profitData.forEach(r => {
+                    const tr = document.createElement('tr');
+                    tr.innerHTML = `
+                        <td>${r.productName || '-'}</td>
+                        <td>${r.totalSoldQuantity}</td>
+                        <td>${formatMoney(r.totalCost)} ₺</td>
+                        <td>${formatMoney(r.totalRevenue)} ₺</td>
+                        <td style="color:${r.totalProfit < 0 ? '#ef4444' : 'var(--success)'}; font-weight:bold;">${formatMoney(r.totalProfit)} ₺</td>
+                    `;
+                    tbodyProfit.appendChild(tr);
+                });
+            }
+
+            if (financeCharts['profitLine']) financeCharts['profitLine'].destroy();
+            const ctxLine = document.getElementById('chartProfitabilityLine').getContext('2d');
+            const topProfits = profitData.slice(0, 10);
+            financeCharts['profitLine'] = new Chart(ctxLine, {
+                type: 'bar', // Better for comparative items than a line chart
+                data: {
+                    labels: topProfits.map(p => p.productName?.substring(0, 15) + '..'),
+                    datasets: [{
+                        label: 'Net Kar (₺)',
+                        data: topProfits.map(p => p.totalProfit),
+                        backgroundColor: 'rgba(139, 92, 246, 0.6)',
+                        borderColor: '#8b5cf6',
+                        borderWidth: 1
+                    }]
+                },
+                options: { responsive: true, maintainAspectRatio: false }
+            });
+        }
+        else if (reportType === 'dailyTrend') {
+            const tbodyDaily = document.getElementById('financeReportDailyBody');
+            tbodyDaily.innerHTML = '<tr><td colspan="4" style="text-align:center;">Rapor getiriliyor...</td></tr>';
+
+            const res = await fetch(`${API_BASE_URL}/api/financereport/daily-trend${qStr}`);
+            if (!res.ok) throw new Error("Günlük trend verileri çekilemedi.");
+            const trendData = await res.json();
+
+            tbodyDaily.innerHTML = '';
+            if (trendData.length === 0) {
+                tbodyDaily.innerHTML = '<tr><td colspan="4" style="text-align:center;">Data bulunamadı.</td></tr>';
+            } else {
+                trendData.forEach(r => {
+                    const tr = document.createElement('tr');
+                    tr.innerHTML = `
+                        <td>${r.date}</td>
+                        <td>${formatMoney(r.totalCost)} ₺</td>
+                        <td>${formatMoney(r.totalRevenue)} ₺</td>
+                        <td style="color:${r.totalProfit < 0 ? '#ef4444' : 'var(--success)'}; font-weight:bold;">${formatMoney(r.totalProfit)} ₺</td>
+                    `;
+                    tbodyDaily.appendChild(tr);
+                });
+            }
+
+            if (financeCharts['dailyTrend']) financeCharts['dailyTrend'].destroy();
+            const ctxLine = document.getElementById('chartDailyTrend').getContext('2d');
+            financeCharts['dailyTrend'] = new Chart(ctxLine, {
+                type: 'line',
+                data: {
+                    labels: trendData.map(p => p.date),
+                    datasets: [
+                        {
+                            label: 'Ciro (₺)',
+                            data: trendData.map(p => p.totalRevenue),
+                            borderColor: '#3b82f6',
+                            backgroundColor: 'rgba(59, 130, 246, 0.1)',
+                            fill: true,
+                            tension: 0.3
+                        },
+                        {
+                            label: 'Net Kar (₺)',
+                            data: trendData.map(p => p.totalProfit),
+                            borderColor: '#10b981',
+                            backgroundColor: 'rgba(16, 185, 129, 0.1)',
+                            fill: true,
+                            tension: 0.3
+                        }
+                    ]
+                },
+                options: { responsive: true, maintainAspectRatio: false, scales: { y: { beginAtZero: true } } }
+            });
+        }
+        else if (reportType === 'agingInventory') {
+            const tbodyAging = document.getElementById('financeReportAgingBody');
+            tbodyAging.innerHTML = '<tr><td colspan="4" style="text-align:center;">Rapor getiriliyor...</td></tr>';
+
+            const res = await fetch(`${API_BASE_URL}/api/financereport/aging-inventory`);
+            if (!res.ok) throw new Error("Stok yaş analizi verileri çekilemedi.");
+            const agingData = await res.json();
+
+            tbodyAging.innerHTML = '';
+            if (agingData.length === 0) {
+                tbodyAging.innerHTML = '<tr><td colspan="4" style="text-align:center;">Data bulunamadı.</td></tr>';
+            } else {
+                agingData.forEach(r => {
+                    const tr = document.createElement('tr');
+                    tr.innerHTML = `
+                        <td>${r.productName}</td>
+                        <td style="font-weight:bold;">${r.currentStock}</td>
+                        <td>${r.oldestEntryDate}</td>
+                        <td style="color:${r.daysInStock > 90 ? '#ef4444' : (r.daysInStock > 30 ? '#f59e0b' : '#22c55e')}; font-weight:bold; text-align:right;">${r.daysInStock} Gün</td>
+                    `;
+                    tbodyAging.appendChild(tr);
+                });
+            }
+
+            if (financeCharts['agingBar']) financeCharts['agingBar'].destroy();
+            const ctxAging = document.getElementById('chartAgingBar').getContext('2d');
+
+            const topRows = agingData.slice(0, 15);
+
+            financeCharts['agingBar'] = new Chart(ctxAging, {
+                type: 'bar',
+                data: {
+                    labels: topRows.map(p => p.productName.substring(0, 20) + '...'),
+                    datasets: [{
+                        label: 'Bekleme Süresi (Gün)',
+                        data: topRows.map(p => p.daysInStock),
+                        backgroundColor: topRows.map(p => p.daysInStock > 90 ? 'rgba(239, 68, 68, 0.7)' : (p.daysInStock > 30 ? 'rgba(245, 158, 11, 0.7)' : 'rgba(34, 197, 94, 0.7)')),
+                        borderColor: topRows.map(p => p.daysInStock > 90 ? '#ef4444' : (p.daysInStock > 30 ? '#f59e0b' : '#22c55e')),
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: { y: { beginAtZero: true, title: { display: true, text: 'Gün' } } }
+                }
+            });
+        }
+        else if (reportType === 'logisticsPerformance') {
+            const tbodyLogistics = document.getElementById('financeReportLogisticsBody');
+            tbodyLogistics.innerHTML = '<tr><td colspan="5" style="text-align:center;">Rapor getiriliyor...</td></tr>';
+
+            const res = await fetch(`${API_BASE_URL}/api/financereport/logistics-performance${qStr}`);
+            if (!res.ok) throw new Error("Lojistik performansı verileri çekilemedi.");
+            const logData = await res.json();
+
+            tbodyLogistics.innerHTML = '';
+            if (logData.length === 0) {
+                tbodyLogistics.innerHTML = '<tr><td colspan="5" style="text-align:center;">Data bulunamadı.</td></tr>';
+            } else {
+                logData.forEach(r => {
+                    const tr = document.createElement('tr');
+
+                    let statColor = '#94a3b8';
+                    if (r.status === 'Delivered') statColor = '#22c55e';
+                    else if (r.status === 'InPreparation') statColor = '#f59e0b';
+                    else if (r.status === 'WaitingForWarehouse') statColor = '#3b82f6';
+
+                    tr.innerHTML = `
+                        <td><strong>${r.invoiceNumber}</strong><br><span style="font-size:0.8rem; color:#64748b;">${r.issueDate}</span></td>
+                        <td>${r.delivererName}</td>
+                        <td style="text-align:center; font-weight:bold; color:${r.waitTimeMinutes > 60 ? '#ef4444' : '#333'}">${r.waitTimeMinutes != null ? r.waitTimeMinutes + ' dk' : '-'}</td>
+                        <td style="text-align:center; font-weight:bold; color:${r.preparationTimeMinutes > 120 ? '#ef4444' : '#333'}">${r.preparationTimeMinutes != null ? r.preparationTimeMinutes + ' dk' : '-'}</td>
+                        <td style="color:${statColor}; font-weight:bold; text-align:right;">${r.status}</td>
+                    `;
+                    tbodyLogistics.appendChild(tr);
+                });
+            }
+
+            if (financeCharts['logisticsBar']) financeCharts['logisticsBar'].destroy();
+            const ctxLog = document.getElementById('chartLogisticsBar').getContext('2d');
+
+            // Ortalama hazırlama süresini personel bazında hesapla
+            const personalStats = {};
+            logData.forEach(r => {
+                if (r.delivererName && r.delivererName !== 'Atanmadı' && r.preparationTimeMinutes != null) {
+                    if (!personalStats[r.delivererName]) personalStats[r.delivererName] = { count: 0, totalPrep: 0 };
+                    personalStats[r.delivererName].count++;
+                    personalStats[r.delivererName].totalPrep += r.preparationTimeMinutes;
+                }
+            });
+
+            const labels = Object.keys(personalStats);
+            const avgData = labels.map(l => personalStats[l].totalPrep / personalStats[l].count);
+            const counts = labels.map(l => personalStats[l].count);
+
+            financeCharts['logisticsBar'] = new Chart(ctxLog, {
+                type: 'bar',
+                data: {
+                    labels: labels,
+                    datasets: [
+                        {
+                            label: 'Ortalama Hazırlama Süresi (Dk)',
+                            data: avgData,
+                            backgroundColor: 'rgba(59, 130, 246, 0.7)',
+                            borderColor: '#3b82f6',
+                            borderWidth: 1,
+                            yAxisID: 'y'
+                        },
+                        {
+                            label: 'Tamamlanan Sipariş Adedi',
+                            data: counts,
+                            backgroundColor: 'rgba(16, 185, 129, 0.7)',
+                            borderColor: '#10b981',
+                            borderWidth: 1,
+                            yAxisID: 'y1'
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: { type: 'linear', display: true, position: 'left', title: { display: true, text: 'Dakika' } },
+                        y1: { type: 'linear', display: true, position: 'right', title: { display: true, text: 'Adet' }, grid: { drawOnChartArea: false } }
+                    }
+                }
+            });
+        }
+        else if (reportType === 'incompleteDeliveries') {
+            const tbodyIncs = document.getElementById('financeReportIncompleteBody');
+            tbodyIncs.innerHTML = '<tr><td colspan="4" style="text-align:center;">Rapor getiriliyor...</td></tr>';
+
+            const res = await fetch(`${API_BASE_URL}/api/financereport/incomplete-deliveries${qStr}`);
+            if (!res.ok) throw new Error("Yarım kalan sevkiyatları çekerken hata oluştu.");
+            const incData = await res.json();
+
+            tbodyIncs.innerHTML = '';
+            if (incData.length === 0) {
+                tbodyIncs.innerHTML = '<tr><td colspan="4" style="text-align:center;">Data bulunamadı.</td></tr>';
+            } else {
+                incData.forEach(r => {
+                    const tr = document.createElement('tr');
+                    tr.innerHTML = `
+                        <td><strong>${r.invoiceNumber}</strong><br><span style="font-size:0.8rem; color:#64748b;">${r.issueDate}</span></td>
+                        <td>${r.delivererName}</td>
+                        <td>${r.incompleteDate || '-'}</td>
+                        <td style="color:${r.waitTimeMinutes > 120 ? '#ef4444' : '#f59e0b'}; font-weight:bold; text-align:right;">
+                            ${r.waitTimeMinutes} Dk.
+                        </td>
+                    `;
+                    tbodyIncs.appendChild(tr);
+                });
+            }
+
+            // Hide the canvas if we don't have a chart for incomplete deliveries right now
+            if (financeCharts['incompleteChart']) financeCharts['incompleteChart'].destroy();
+            const canvasEq = document.getElementById('chartIncompleteLine');
+            if (canvasEq) {
+                // Not generating chart right now for this.
+            }
+        } else if (reportType === 'transferHistory') {
+            const tbodyHist = document.getElementById('financeReportTransferHistoryBody');
+            tbodyHist.innerHTML = '<tr><td colspan="5" style="text-align:center;">Rapor getiriliyor...</td></tr>';
+
+            const res = await fetch(`${API_BASE_URL}/api/financereport/transfer-history`);
+            if (!res.ok) throw new Error("Sevkiyat tarihçesini çekerken hata oluştu.");
+            const histData = await res.json();
+
+            tbodyHist.innerHTML = '';
+            if (histData.length === 0) {
+                tbodyHist.innerHTML = '<tr><td colspan="5" style="text-align:center;">Tarihçe kaydı (Log) bulunamadı.</td></tr>';
+            } else {
+                histData.forEach(r => {
+                    const tr = document.createElement('tr');
+                    let badgeColor = r.action.includes('Transfer') ? '#8b5cf6' :
+                        r.action.includes('Unassign') ? '#ef4444' :
+                            r.action.includes('Assign') ? '#3b82f6' : '#9ca3af';
+
+                    tr.innerHTML = `
+                        <td><strong>${r.invoiceNumber}</strong><br><span style="font-size:0.8rem; color:#64748b;">Kesim: ${r.issueDate}</span></td>
+                        <td>${r.userName}</td>
+                        <td style="font-weight:bold; color:${badgeColor};">${r.action}</td>
+                        <td>${r.status}</td>
+                        <td>${r.logDate}</td>
+                    `;
+                    tbodyHist.appendChild(tr);
+                });
+            }
+        }
+    } catch (e) {
+        showToast(e.message, 'error');
+    }
+}
+
+window.exportFinanceReportToExcel = function () {
+    const reportType = document.getElementById('financeReportType')?.value || 'userPerformance';
+    let tableId = '';
+    let fileName = '';
+
+    if (reportType === 'userPerformance') {
+        tableId = 'financeReportUsersBody';
+        fileName = 'kullanici_performans_raporu';
+    } else if (reportType === 'profitability') {
+        tableId = 'financeReportProfitBody';
+        fileName = 'urun_karlilik_raporu';
+    } else if (reportType === 'dailyTrend') {
+        tableId = 'financeReportDailyBody';
+        fileName = 'gunluk_ciro_kar_analizi';
+    } else if (reportType === 'agingInventory') {
+        tableId = 'financeReportAgingBody';
+        fileName = 'stok_yas_analizi';
+    } else if (reportType === 'logisticsPerformance') {
+        tableId = 'financeReportLogisticsBody';
+        fileName = 'lojistik_sevkiyat_performans';
+    } else if (reportType === 'incompleteDeliveries') {
+        tableId = 'financeReportIncompleteBody';
+        fileName = 'yarim_sevkiyatlar_raporu';
+    } else if (reportType === 'transferHistory') {
+        tableId = 'financeReportTransferHistoryBody';
+        fileName = 'sevkiyat_devir_tarihce_raporu';
+    }
+
+    const tbody = document.getElementById(tableId);
+    if (!tbody || tbody.innerHTML.includes('Rapor getiriliyor...') || tbody.innerHTML.includes('Data bulunamadı')) {
+        showToast('Dışa aktarılacak veri bulunamadı.', 'error');
+        return;
+    }
+
+    const tableElement = tbody.closest('table');
+    if (!tableElement) return;
+
+    try {
+        const wb = XLSX.utils.table_to_book(tableElement, { sheet: "Sheet1" });
+        XLSX.writeFile(wb, `${fileName}.xlsx`);
+        showToast("Excel dosyası indirildi.", "success");
+    } catch (e) {
+        showToast('Excel dışa aktarılırken hata: ' + e.message, 'error');
+    }
+}
+
+window.exportFinanceReportToPDF = function () {
+    const reportType = document.getElementById('financeReportType')?.value || 'userPerformance';
+    let tableId = '';
+    let title = '';
+
+    if (reportType === 'userPerformance') {
+        tableId = 'financeReportUsersBody';
+        title = 'Kullanici Performans Raporu';
+    } else if (reportType === 'profitability') {
+        tableId = 'financeReportProfitBody';
+        title = 'Urun Karlilik Raporu';
+    } else if (reportType === 'dailyTrend') {
+        tableId = 'financeReportDailyBody';
+        title = 'Gunluk Ciro ve Kar Analizi';
+    } else if (reportType === 'agingInventory') {
+        tableId = 'financeReportAgingBody';
+        title = 'Stok Yas Analizi';
+    } else if (reportType === 'logisticsPerformance') {
+        tableId = 'financeReportLogisticsBody';
+        title = 'Lojistik ve Sevkiyat Performans Raporu';
+    } else if (reportType === 'incompleteDeliveries') {
+        tableId = 'financeReportIncompleteBody';
+        title = 'Yarım Kalan / Bekleyen Sevkiyatlar';
+    } else if (reportType === 'transferHistory') {
+        tableId = 'financeReportTransferHistoryBody';
+        title = 'Sevkiyat Devir & Tarihçe (Log) Raporu';
+    }
+
+    const tbody = document.getElementById(tableId);
+    if (!tbody || tbody.innerHTML.includes('Rapor getiriliyor...') || tbody.innerHTML.includes('Data bulunamadı')) {
+        showToast('Dışa aktarılacak veri bulunamadı.', 'error');
+        return;
+    }
+
+    const tableElement = tbody.closest('table');
+    if (!tableElement) return;
+
+    try {
+        const { jsPDF } = window.jspdf;
+        const doc = new jsPDF('landscape');
+
+        let yPos = 20;
+        doc.text(title, 14, 15);
+
+        const activeContainer = document.getElementById(`report-container-${reportType}`);
+        if (activeContainer) {
+            const canvases = activeContainer.querySelectorAll('canvas');
+            canvases.forEach((canvas) => {
+                // To prevent transparent bg issues, draw on white canvas first
+                const whiteCanvas = document.createElement('canvas');
+                whiteCanvas.width = canvas.width;
+                whiteCanvas.height = canvas.height;
+                const ctx = whiteCanvas.getContext('2d');
+                ctx.fillStyle = "#ffffff";
+                ctx.fillRect(0, 0, whiteCanvas.width, whiteCanvas.height);
+                ctx.drawImage(canvas, 0, 0);
+
+                const imgData = whiteCanvas.toDataURL('image/jpeg', 1.0);
+
+                const pdfWidth = 260; // Max width in landscape (297 total)
+                const aspect = canvas.height / canvas.width;
+                const pdfHeight = pdfWidth * aspect;
+
+                if (yPos + pdfHeight > 190) { // Max height in landscape is ~210
+                    doc.addPage();
+                    yPos = 20;
+                }
+
+                doc.addImage(imgData, 'JPEG', 18, yPos, pdfWidth, pdfHeight);
+                yPos += pdfHeight + 10;
+            });
+        }
+
+        // Next page for the table if it's too squeezed
+        if (yPos > 150) {
+            doc.addPage();
+            yPos = 20;
+            doc.text(title + ' (Tablo)', 14, 15);
+        }
+
+        doc.autoTable({
+            html: tableElement,
+            startY: yPos,
+            theme: 'grid',
+            styles: { font: 'helvetica', fontSize: 10 },
+            headStyles: { fillColor: [41, 128, 185], textColor: 255 }
+        });
+
+        doc.save(`${title.replace(/ /g, '_')}.pdf`);
+        showToast("PDF dosyası indirildi.", "success");
+    } catch (e) {
+        showToast('PDF dışa aktarılırken hata: ' + e.message, 'error');
+    }
+}
+
 window.hasPermission = function (module, type) {
     const user = JSON.parse(localStorage.getItem('user'));
     if (!user) return false;
@@ -319,9 +882,10 @@ const ID_MAPPINGS = {
 
 async function refreshIdMappings() {
     try {
-        const userRes = await fetch(`${API_BASE_URL}/api/users`);
+        const userRes = await fetch(`${API_BASE_URL}/api/users?pageSize=1000`);
         if (userRes.ok) {
-            const users = await userRes.json();
+            const pagedUsers = await userRes.json();
+            const users = pagedUsers.items || [];
             users.forEach(u => {
                 const name = `${u.firstName} ${u.lastName}`.trim() || u.userName;
                 ID_MAPPINGS['UpdatedByUserId'][u.id] = name;
@@ -335,19 +899,30 @@ async function refreshIdMappings() {
             fetch(`${API_BASE_URL}/api/product/categories`),
             fetch(`${API_BASE_URL}/api/product/brands`),
             fetch(`${API_BASE_URL}/api/product/units`),
-            fetch(`${API_BASE_URL}/api/warehouse`),
-            fetch(`${API_BASE_URL}/api/companies`),
+            fetch(`${API_BASE_URL}/api/warehouse?pageSize=1000`),
+            fetch(`${API_BASE_URL}/api/companies?pageSize=1000`),
             fetch(`${API_BASE_URL}/api/users/roles`)
         ]);
 
         if (catRes && catRes.ok) (await catRes.json()).forEach(x => ID_MAPPINGS['CategoryId'][x.id] = x.name);
         if (brandRes && brandRes.ok) (await brandRes.json()).forEach(x => ID_MAPPINGS['BrandId'][x.id] = x.name);
         if (unitRes && unitRes.ok) (await unitRes.json()).forEach(x => ID_MAPPINGS['UnitId'][x.id] = x.name);
-        if (whRes && whRes.ok) (await whRes.json()).forEach(x => {
-            ID_MAPPINGS['WarehouseId'][x.id] = x.warehouseName;
-            ID_MAPPINGS['TargetWarehouseId'][x.id] = x.warehouseName;
-        });
-        if (companyRes && companyRes.ok) (await companyRes.json()).forEach(x => ID_MAPPINGS['CompanyId'][x.id] = x.companyName || x.name);
+
+        if (whRes && whRes.ok) {
+            const pagedWh = await whRes.json();
+            const whItems = pagedWh.items || [];
+            whItems.forEach(x => {
+                ID_MAPPINGS['WarehouseId'][x.id] = x.warehouseName;
+                ID_MAPPINGS['TargetWarehouseId'][x.id] = x.warehouseName;
+            });
+        }
+
+        if (companyRes && companyRes.ok) {
+            const pagedComp = await companyRes.json();
+            const compItems = pagedComp.items || [];
+            compItems.forEach(x => ID_MAPPINGS['CompanyId'][x.id] = x.companyName || x.name);
+        }
+
         if (roleRes && roleRes.ok) (await roleRes.json()).forEach(x => ID_MAPPINGS['RoleId'][x.id] = x.name);
 
     } catch (e) {
@@ -489,31 +1064,125 @@ window.showConfirm = function (title, message, yesText = 'Evet, Sil', noText = '
 
 window.currentStatusFilter = {};
 
+window.renderPagination = function (container, totalPages, currentPage, pageSize, onPageChange) {
+    if (!container) return;
+
+    // UI creation
+    let html = `
+        <div style="display: flex; justify-content: center; align-items: center; gap: 20px; margin-top: 10px; font-size: 0.9rem;">
+            <div style="display: flex; align-items: center; gap: 5px;">
+                <label style="margin:0;">Sayfa Başına:</label>
+                <select class="page-size-select" style="padding: 4px; border-radius: 4px; border: 1px solid #ccc; background: white;">
+                    <option value="10" ${pageSize === 10 ? 'selected' : ''}>10</option>
+                    <option value="20" ${pageSize === 20 ? 'selected' : ''}>20</option>
+                    <option value="50" ${pageSize === 50 ? 'selected' : ''}>50</option>
+                </select>
+            </div>
+            
+            <div style="display: flex; gap: 5px; align-items:center;">
+                <button class="btn-page" data-page="1" ${currentPage === 1 ? 'disabled' : ''}>&laquo;</button>
+                <button class="btn-page" data-page="${currentPage - 1}" ${currentPage === 1 ? 'disabled' : ''}>&lsaquo;</button>
+                <span style="margin: 0 10px;">Sayfa ${currentPage} / ${totalPages === 0 ? 1 : totalPages}</span>
+                <button class="btn-page" data-page="${currentPage + 1}" ${currentPage >= totalPages ? 'disabled' : ''}>&rsaquo;</button>
+                <button class="btn-page" data-page="${totalPages}" ${currentPage >= totalPages ? 'disabled' : ''}>&raquo;</button>
+            </div>
+        </div>
+    `;
+    container.innerHTML = html;
+
+    // Events
+    const select = container.querySelector('.page-size-select');
+    select.addEventListener('change', (e) => {
+        onPageChange(1, parseInt(e.target.value));
+    });
+
+    const btns = container.querySelectorAll('.btn-page');
+    btns.forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            if (btn.hasAttribute('disabled')) return;
+            const newPage = parseInt(btn.getAttribute('data-page'));
+            if (newPage > 0 && newPage <= totalPages) {
+                onPageChange(newPage, pageSize);
+            }
+        });
+    });
+};
+
+window.handleSearch = function (callbackName) {
+    if (!window[`debounce_${callbackName}`]) {
+        window[`debounce_${callbackName}`] = window.debounce(() => {
+            if (window[callbackName]) {
+                // Reset to page 1 for new search
+                const pageVar = callbackName.replace('load', '').toLowerCase() + 'Page';
+                if (window[pageVar]) window[pageVar] = 1;
+                else {
+                    // fallbacks
+                    if (callbackName === 'loadProducts') window.productPage = 1;
+                    if (callbackName === 'loadUsers') window.userPage = 1;
+                    if (callbackName === 'loadCompanies') window.companyPage = 1;
+                    if (callbackName === 'loadSuppliers') window.supplierPage = 1;
+                    if (callbackName === 'loadInvoices') window.invoicePage = 1;
+                    if (callbackName === 'loadOffers') window.offerPage = 1;
+                    if (callbackName === 'loadPriceLists') window.priceListPage = 1;
+                    if (callbackName === 'loadCustomerCompanies') window.customerCompanyPage = 1;
+                    if (callbackName === 'loadCustomers') window.customerPage = 1;
+                    if (callbackName === 'loadWarehouses') window.warehousePage = 1;
+                }
+                window[callbackName]();
+            }
+        }, 500);
+    }
+    window[`debounce_${callbackName}`]();
+};
+
 window.renderStatusFilter = function (sectionName, containerId, callback) {
     const container = document.getElementById(containerId);
     if (!container) return;
 
-    if (!window.hasPermission('ShowDeletedItems', 'read')) {
-        container.style.display = 'none';
-        container.innerHTML = '';
-        return;
-    }
-
     const current = window.currentStatusFilter[sectionName] || 'active';
-    // Ensure we have a string name for the callback
     const callbackName = typeof callback === 'function' ? (callback.name || "") : callback;
 
-    container.style.display = 'flex';
-    container.innerHTML = `
-        <div class="status-filter-container">
-            <span>💾 Veri Filtresi:</span>
-            <div class="status-options">
-                <button class="status-btn ${current === 'active' ? 'active' : ''}" onclick="window.setStatusFilter('${sectionName}', 'active', '${containerId}', '${callbackName}')">Aktif</button>
-                <button class="status-btn ${current === 'passive' ? 'active' : ''}" onclick="window.setStatusFilter('${sectionName}', 'passive', '${containerId}', '${callbackName}')">Pasif (Silinenler)</button>
-                <button class="status-btn ${current === 'all' ? 'active' : ''}" onclick="window.setStatusFilter('${sectionName}', 'all', '${containerId}', '${callbackName}')">Tümü</button>
-            </div>
+    const searchInputMap = {
+        'users': 'search-users',
+        'inventory': 'inventorySearchInput',
+        'pricelists': 'search-pricelists',
+        'invoices': 'search-invoices',
+        'offers': 'search-offers',
+        'suppliers': 'search-suppliers',
+        'customer-companies': 'search-customer-companies',
+        'customers': 'search-customers',
+        'companies': 'search-companies'
+    };
+    const searchId = searchInputMap[sectionName] || `search-${sectionName}`;
+
+    let searchHtml = `
+        <div class="search-box-container" style="flex: 1; min-width: 250px;">
+            <input type="text" id="${searchId}" class="form-control" placeholder="Ara..." 
+                   onkeyup="window.handleSearch('${callbackName}')">
         </div>
     `;
+
+    let filterHtml = "";
+    if (window.hasPermission('ShowDeletedItems', 'read')) {
+        filterHtml = `
+            <div class="status-filter-container">
+                <span>💾 Veri Filtresi:</span>
+                <div class="status-options">
+                    <button class="status-btn ${current === 'active' ? 'active' : ''}" onclick="window.setStatusFilter('${sectionName}', 'active', '${containerId}', '${callbackName}')">Aktif</button>
+                    <button class="status-btn ${current === 'passive' ? 'active' : ''}" onclick="window.setStatusFilter('${sectionName}', 'passive', '${containerId}', '${callbackName}')">Pasif (Silinenler)</button>
+                    <button class="status-btn ${current === 'all' ? 'active' : ''}" onclick="window.setStatusFilter('${sectionName}', 'all', '${containerId}', '${callbackName}')">Tümü</button>
+                </div>
+            </div>
+        `;
+    }
+
+    container.style.display = 'flex';
+    container.style.justifyContent = 'space-between';
+    container.style.alignItems = 'center';
+    container.style.gap = '1rem';
+    container.style.flexWrap = 'wrap';
+
+    container.innerHTML = searchHtml + filterHtml;
 };
 
 window.setStatusFilter = function (section, status, containerId, callback) {
@@ -547,6 +1216,28 @@ window.switchView = function (viewName, defaultTab) {
 
     if (filterMap[viewName]) {
         window.renderStatusFilter(viewName, filterMap[viewName].container, filterMap[viewName].callback);
+    }
+
+    // Hide filter containers for views that don't use them
+    if (viewName !== 'suppliers') document.getElementById('filter-container-suppliers').style.display = 'none';
+    if (viewName !== 'customers') document.getElementById('filter-container-customers').style.display = 'none';
+    if (viewName !== 'finance-reports') {
+        // Hide other filter containers if they exist and are not for the current view
+        const allFilterContainers = document.querySelectorAll('.status-filter-container');
+        allFilterContainers.forEach(container => {
+            if (!filterMap[viewName] || container.id !== filterMap[viewName].container) {
+                container.style.display = 'none';
+            }
+        });
+    }
+
+
+    if (viewName === 'finance-reports') {
+        const sel = document.getElementById('financeReportType');
+        if (sel) {
+            sel.addEventListener('change', loadFinanceReports);
+        }
+        loadFinanceReports();
     }
 
     // Permission enforcement based on data-module attribute of the menu item
@@ -586,6 +1277,8 @@ window.switchView = function (viewName, defaultTab) {
         'settings': 'Sistem Ayarları',
         'offers': 'Teklif Yönetimi',
         'invoices': 'Fatura Yönetimi',
+        'invoice-details': 'Fatura Detayı',
+        'finance-reports': 'Finans Raporları',
         'inventory': 'Stok Yönetimi',
         'stock-entry': 'Stok Girişi',
         'reports': 'Raporlar',
@@ -668,11 +1361,15 @@ window.loadStockEntry = async function () {
     sSel.innerHTML = '<option value="">Yükleniyor...</option>';
 
     try {
-        const [products, warehouses, suppliers] = await Promise.all([
-            fetch(`${API_BASE_URL}/api/product`).then(async r => r.status === 403 ? [] : r.json()),
-            fetch(`${API_BASE_URL}/api/warehouse`).then(async r => r.status === 403 ? [] : r.json()),
-            fetch(`${API_BASE_URL}/api/supplier`).then(async r => r.status === 403 ? [] : r.json())
+        const [productsRes, warehousesRes, suppliersRes] = await Promise.all([
+            fetch(`${API_BASE_URL}/api/product?pageSize=1000`).then(async r => r.status === 403 ? null : r.json()),
+            fetch(`${API_BASE_URL}/api/warehouse?pageSize=1000`).then(async r => r.status === 403 ? null : r.json()),
+            fetch(`${API_BASE_URL}/api/supplier?pageSize=1000`).then(async r => r.status === 403 ? null : r.json())
         ]);
+
+        const products = Array.isArray(productsRes) ? productsRes : (productsRes?.items || []);
+        const warehouses = Array.isArray(warehousesRes) ? warehousesRes : (warehousesRes?.items || []);
+        const suppliers = Array.isArray(suppliersRes) ? suppliersRes : (suppliersRes?.items || []);
 
         pSel.innerHTML = '<option value="">Ürün Seçiniz...</option>';
         products.forEach(p => {
@@ -717,11 +1414,17 @@ window.loadWaybillHistoryView = async function () {
         let items = [];
 
         if (type === 'Giden') {
-            const res = await fetch(`${API_BASE_URL}/api/customer/companies`);
-            if (res.ok) items = await res.json();
+            const res = await fetch(`${API_BASE_URL}/api/customer/companies?pageSize=1000`);
+            if (res.ok) {
+                const paged = await res.json();
+                items = Array.isArray(paged) ? paged : (paged.items || []);
+            }
         } else {
-            const res = await fetch(`${API_BASE_URL}/api/supplier`);
-            if (res.ok) items = await res.json();
+            const res = await fetch(`${API_BASE_URL}/api/supplier?pageSize=1000`);
+            if (res.ok) {
+                const paged = await res.json();
+                items = paged.items || [];
+            }
         }
 
         sSel.innerHTML = '<option value="">Tümü</option>';
@@ -969,8 +1672,9 @@ window.initReportsView = async function () {
 
     wSel.innerHTML = '<option value="">Tüm Depolar</option>';
     try {
-        const res = await fetch(`${API_BASE_URL}/api/warehouse`);
-        const warehouses = await res.json();
+        const res = await fetch(`${API_BASE_URL}/api/warehouse?pageSize=1000`);
+        const pagedData = await res.json();
+        const warehouses = Array.isArray(pagedData) ? pagedData : (pagedData.items || []);
         warehouses.forEach(w => {
             wSel.innerHTML += `<option value="${w.id}">${w.warehouseName}</option>`;
         });
@@ -1319,6 +2023,10 @@ window.loadUsers = async function () {
     const tbody = document.getElementById('userListBody');
     if (!tbody) return;
 
+    if (!window.userPage) window.userPage = 1;
+    if (!window.userPageSize) window.userPageSize = 10;
+    const searchTerm = document.getElementById('search-users')?.value || '';
+
     const currentUser = JSON.parse(localStorage.getItem('user'));
 
     // User role should never access this function
@@ -1331,7 +2039,7 @@ window.loadUsers = async function () {
 
     try {
         const filter = window.currentStatusFilter['users'] || 'active';
-        let url = `${API_BASE_URL}/api/users?status=${filter}`;
+        let url = `${API_BASE_URL}/api/users?status=${filter}&searchTerm=${encodeURIComponent(searchTerm)}&page=${window.userPage}&pageSize=${window.userPageSize}`;
 
         // Root sees all users, Admin sees only users they created
         if (currentUser.role === 'Admin') {
@@ -1341,16 +2049,20 @@ window.loadUsers = async function () {
 
         const res = await fetch(url);
         if (res.status === 403) {
-            tbody.innerHTML = '<tr><td colspan="5" style="color:var(--error); text-align:center;">🚫 Bu verileri görmeye yetkiniz bulunmamaktadır.</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="6" style="color:var(--error); text-align:center;">🚫 Bu verileri görmeye yetkiniz bulunmamaktadır.</td></tr>';
             return;
         }
         if (!res.ok) throw new Error('Yükleme hatası');
 
-        const users = await res.json();
+        const pagedData = await res.json();
+        const users = pagedData.items || [];
+        const totalCount = pagedData.totalCount || 0;
+        const totalPages = Math.ceil(totalCount / window.userPageSize);
 
         tbody.innerHTML = '';
         if (users.length === 0) {
             tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;">Kullanıcı bulunamadı.</td></tr>';
+            renderPagination(document.getElementById('userPaginationContainer'), totalPages, window.userPage, window.userPageSize, () => loadUsers());
             return;
         }
 
@@ -1388,6 +2100,19 @@ window.loadUsers = async function () {
             `;
             tbody.appendChild(tr);
         });
+
+        if (!document.getElementById('userPaginationContainer')) {
+            const container = document.createElement('div');
+            container.id = 'userPaginationContainer';
+            tbody.closest('.glass-card').appendChild(container);
+        }
+
+        renderPagination(document.getElementById('userPaginationContainer'), totalPages, window.userPage, window.userPageSize, (newPage, newSize) => {
+            window.userPage = newPage;
+            window.userPageSize = newSize;
+            loadUsers();
+        });
+
     } catch (e) {
         tbody.innerHTML = '<tr><td colspan="6" style="color:var(--error); text-align:center;">Kullanıcı listesi yüklenemedi!</td></tr>';
         console.error(e);
@@ -1483,8 +2208,9 @@ window.openUserModal = async function (id) {
     const compSel = document.getElementById('uCompany');
     compSel.innerHTML = '<option value="">Şirket Seçin...</option>';
     try {
-        const compRes = await fetch(`${API_BASE_URL}/api/companies`);
-        const companies = await compRes.json();
+        const compRes = await fetch(`${API_BASE_URL}/api/companies?pageSize=500`);
+        const pagedData = await compRes.json();
+        const companies = pagedData.items || [];
         companies.forEach(c => compSel.innerHTML += `<option value="${c.id}">${c.companyName}</option>`);
     } catch (e) { console.error("Companies load failed", e); }
 
@@ -1630,7 +2356,7 @@ window.openPermissionsModal = async function (userId, userName) {
             'Genel': ['Reports'],
             'Stok Yönetimi': ['Product', 'Category', 'Stock', 'Warehouse', 'Upload', 'Brand', 'ProductUnit', 'StockMovement', 'StockAlert', 'ProductLocation'],
             'Ticari': ['Supplier', 'Customer', 'CustomerCompany'],
-            'Finans': ['PriceList', 'Offers', 'Invoices', 'Offer', 'Invoice', 'OfferItem', 'InvoiceItem'],
+            'Finans': ['PriceList', 'Offers', 'Invoices', 'Offer', 'Invoice', 'OfferItem', 'InvoiceItem', 'FinanceReport'],
             'Sistem': ['Users', 'Companies', 'System', 'Logs', 'Auth', 'User', 'Role', 'UserPermission', 'UserApiKey', 'SystemSetting', 'LicenseInfo', 'AuditLog', 'Company', 'Title', 'ShowDeletedItems']
         };
 
@@ -1792,22 +2518,27 @@ window.loadOffers = async function () {
 
     try {
         const statusFilter = window.currentStatusFilter['offers'] || 'active';
-        const res = await fetch(`${API_BASE_URL}/api/offer?status=${statusFilter}`);
+
+        window.offerPage = window.offerPage || 1;
+        window.offerPageSize = window.offerPageSize || 10;
+
+        const res = await fetch(`${API_BASE_URL}/api/offer?status=${statusFilter}&page=${window.offerPage}&pageSize=${window.offerPageSize}`);
         if (res.status === 403) {
             tbody.innerHTML = '<tr><td colspan="7" style="color:var(--error); text-align:center;">🚫 Yetkisiz Erişim</td></tr>';
             return;
         }
         if (!res.ok) throw new Error('Teklifler alınamadı');
-        let offers = await res.json();
 
-        const filterEl = document.getElementById('offerStatusFilter');
-        if (filterEl && filterEl.value) {
-            offers = offers.filter(o => o.status === parseInt(filterEl.value));
-        }
+        const pagedData = await res.json();
+        const offers = pagedData.items || [];
+        const totalCount = pagedData.totalCount || 0;
+        const totalPages = Math.ceil(totalCount / window.offerPageSize);
+
 
         tbody.innerHTML = '';
         if (offers.length === 0) {
             tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;">Aranılan filtreye uygun teklif bulunamadı.</td></tr>';
+            renderPagination(document.getElementById('offerPaginationContainer'), totalPages, window.offerPage, window.offerPageSize, () => loadOffers());
             return;
         }
 
@@ -1860,6 +2591,20 @@ window.loadOffers = async function () {
             `;
             tbody.appendChild(tr);
         });
+
+        if (!document.getElementById('offerPaginationContainer')) {
+            const table = tbody.closest('table');
+            const pagContainer = document.createElement('div');
+            pagContainer.id = 'offerPaginationContainer';
+            pagContainer.className = 'pagination-container';
+            table.parentNode.insertBefore(pagContainer, table.nextSibling);
+        }
+        renderPagination(document.getElementById('offerPaginationContainer'), totalPages, window.offerPage, window.offerPageSize, (newPage, newSize) => {
+            window.offerPage = newPage;
+            window.offerPageSize = newSize;
+            loadOffers();
+        });
+
     } catch (e) {
         tbody.innerHTML = '<tr><td colspan="7" style="color:var(--error); text-align:center;">Hata oluştu!</td></tr>';
         console.error(e);
@@ -1873,23 +2618,39 @@ window.loadInvoices = async function () {
 
     try {
         const filter = window.currentStatusFilter['invoices'] || 'active';
-        const res = await fetch(`${API_BASE_URL}/api/invoices?status=${filter}`);
+
+        window.invoicePage = window.invoicePage || 1;
+        window.invoicePageSize = window.invoicePageSize || 10;
+
+        const res = await fetch(`${API_BASE_URL}/api/invoices?status=${filter}&page=${window.invoicePage}&pageSize=${window.invoicePageSize}`);
         if (res.status === 403) {
             tbody.innerHTML = '<tr><td colspan="6" style="color:var(--error); text-align:center;">🚫 Yetkisiz Erişim</td></tr>';
             return;
         }
         if (!res.ok) throw new Error('Faturalar alınamadı');
-        const invoices = await res.json();
+
+        const pagedData = await res.json();
+        const invoices = pagedData.items || [];
+        const totalCount = pagedData.totalCount || 0;
+        const totalPages = Math.ceil(totalCount / window.invoicePageSize);
+
 
         tbody.innerHTML = '';
         if (invoices.length === 0) {
             tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;">Fatura bulunamadı.</td></tr>';
+            renderPagination(document.getElementById('invoicePaginationContainer'), totalPages, window.invoicePage, window.invoicePageSize, () => loadInvoices());
             return;
         }
 
         invoices.forEach(i => {
             const tr = document.createElement('tr');
             if (i.isDeleted) tr.style.opacity = '0.6';
+
+            tr.style.cursor = 'pointer';
+            tr.onclick = (e) => {
+                if (e.target.closest('button') || e.target.closest('.action-btn-container')) return;
+                openInvoiceDetails(i.id);
+            };
 
             // Status: 1=Draft, 5=Approved
             let statusBadge = '<span class="badge" style="background:#f3f4f6;">Taslak</span>';
@@ -1923,6 +2684,20 @@ window.loadInvoices = async function () {
             `;
             tbody.appendChild(tr);
         });
+
+        if (!document.getElementById('invoicePaginationContainer')) {
+            const table = tbody.closest('table');
+            const pagContainer = document.createElement('div');
+            pagContainer.id = 'invoicePaginationContainer';
+            pagContainer.className = 'pagination-container';
+            table.parentNode.insertBefore(pagContainer, table.nextSibling);
+        }
+        renderPagination(document.getElementById('invoicePaginationContainer'), totalPages, window.invoicePage, window.invoicePageSize, (newPage, newSize) => {
+            window.invoicePage = newPage;
+            window.invoicePageSize = newSize;
+            loadInvoices();
+        });
+
     } catch (e) {
         tbody.innerHTML = '<tr><td colspan="6" style="color:var(--error); text-align:center;">Hata oluştu!</td></tr>';
         console.error(e);
@@ -1938,10 +2713,94 @@ window.rejectInvoice = async function (id) {
         if (res.ok) {
             showToast('Fatura reddedildi');
             loadInvoices();
+            if (document.getElementById('section-invoice-details') && document.getElementById('section-invoice-details').style.display !== 'none') {
+                openInvoiceDetails(id);
+            }
         } else {
             alert('İşlem başarısız.');
         }
     } catch (e) { alert('Hata: ' + e.message); }
+}
+
+window.openInvoiceDetails = async function (id) {
+    try {
+        switchView('invoice-details');
+        const grid = document.getElementById('invoiceInfoGrid');
+        const tbody = document.getElementById('invoiceDetailsListBody');
+        const tfoot = document.getElementById('invoiceDetailsFoot');
+        const actions = document.getElementById('invoiceDetailsActions');
+
+        if (grid) grid.innerHTML = 'Yükleniyor...';
+        if (tbody) tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;">Yükleniyor...</td></tr>';
+        if (tfoot) tfoot.innerHTML = '';
+        if (actions) actions.innerHTML = '';
+
+        const invoiceRes = await fetch(`${API_BASE_URL}/api/invoices/${id}`);
+        if (!invoiceRes.ok) throw new Error('Fatura detayları yüklenemedi.');
+        const invoice = await invoiceRes.json();
+
+        // Populate info grid
+        let statusBadge = '<span class="badge" style="background:#f3f4f6;">Taslak</span>';
+        if (invoice.status === 5) statusBadge = '<span class="badge" style="background:var(--success); color:white;">Onaylı</span>';
+        if (invoice.isDeleted) statusBadge = '<span class="badge" style="background:#fecaca;color:#991b1b;">PASİF (SİLİNDİ)</span>';
+
+        if (grid) grid.innerHTML = `
+            <div><label style="color:#64748b; font-size:0.8rem;">Fatura No</label><div style="font-weight:600;">${invoice.invoiceNumber || '-'}</div></div>
+            <div><label style="color:#64748b; font-size:0.8rem;">Tarih</label><div style="font-weight:600;">${new Date(invoice.issueDate).toLocaleDateString()}</div></div>
+            <div><label style="color:#64748b; font-size:0.8rem;">Durum</label><div style="margin-top:0.25rem;">${statusBadge}</div></div>
+            <div><label style="color:#64748b; font-size:0.8rem;">İlgili Firma</label><div style="font-weight:600;">${invoice.buyerCompanyName || '-'}</div></div>
+            <div><label style="color:#64748b; font-size:0.8rem;">Adres / Diğer</label><div style="font-weight:600;">${invoice.buyerCompanyAddress || '-'}</div></div>
+        `;
+
+        // Populate actions
+        const canWrite = window.hasPermission('Invoices', 'write');
+        if (actions) {
+            actions.innerHTML = "";
+            if (!invoice.isDeleted && invoice.status === 1 && canWrite) {
+                actions.innerHTML += `<button class="btn-action" style="padding:0.75rem 1.5rem; background:#ef4444; border-radius:8px;" onclick="rejectInvoice(${invoice.id})">Reddet</button>`;
+                actions.innerHTML += `<button class="btn-action" style="padding:0.75rem 1.5rem; background:var(--primary); border-radius:8px;" onclick="approveInvoice(${invoice.id})">Onayla</button>`;
+            }
+            actions.innerHTML += `<button class="btn-action" style="padding:0.75rem 1.5rem; background:#64748b; border-radius:8px;" onclick="switchView('invoices')">Sayfayı Kapat</button>`;
+        }
+
+        // populate items
+        if (tbody) {
+            tbody.innerHTML = '';
+            if (!invoice.items || invoice.items.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;">Kalem bulunamadı.</td></tr>';
+            } else {
+                let subtotal = 0;
+                invoice.items.forEach(item => {
+                    const total = item.quantity * item.unitPrice;
+                    const totalWithTax = total + (total * (item.vatRate / 100));
+                    subtotal += totalWithTax;
+
+                    const tr = document.createElement('tr');
+                    tr.innerHTML = `
+                        <td>${item.productCode || '-'}</td>
+                        <td>${item.productName || '-'}</td>
+                        <td>${item.warehouseName || '-'}${item.shelfName ? ' / ' + item.shelfName : ''}</td>
+                        <td>${item.quantity}</td>
+                        <td>${formatMoney(item.unitPrice)} ₺</td>
+                        <td>%${item.vatRate}</td>
+                        <td>${formatMoney(totalWithTax)} ₺</td>
+                    `;
+                    tbody.appendChild(tr);
+                });
+
+                if (tfoot) {
+                    tfoot.innerHTML = `
+                        <tr>
+                            <td colspan="6" style="text-align:right;">Genel Toplam:</td>
+                            <td>${formatMoney(subtotal)} ₺</td>
+                        </tr>
+                    `;
+                }
+            }
+        }
+    } catch (e) {
+        showToast('Hata: ' + e.message, 'error');
+    }
 }
 
 window.approveOffer = async function (id) {
@@ -1997,6 +2856,9 @@ window.approveInvoice = async function (id) {
         if (res.ok) {
             showToast('Fatura onaylandı ve stok güncellendi');
             loadInvoices();
+            if (document.getElementById('section-invoice-details') && document.getElementById('section-invoice-details').style.display !== 'none') {
+                openInvoiceDetails(id);
+            }
         } else {
             alert('İşlem başarısız.');
         }
@@ -2015,15 +2877,27 @@ window.loadCompanies = async function () {
     tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;">Yükleniyor...</td></tr>';
     try {
         const filter = window.currentStatusFilter['companies'] || 'active';
-        const res = await fetch(`${API_BASE_URL}/api/companies?status=${filter}`);
+
+        window.companyPage = window.companyPage || 1;
+        window.companyPageSize = window.companyPageSize || 10;
+
+        const res = await fetch(`${API_BASE_URL}/api/companies?status=${filter}&page=${window.companyPage}&pageSize=${window.companyPageSize}`);
         if (res.status === 403) {
             tbody.innerHTML = '<tr><td colspan="4" style="color:var(--error); text-align:center;">🚫 Yetkisiz Erişim</td></tr>';
             return;
         }
 
-        const data = await res.json();
+        const pagedData = await res.json();
+        const data = pagedData.items || [];
+        const totalCount = pagedData.totalCount || 0;
+        const totalPages = Math.ceil(totalCount / window.companyPageSize);
+
         tbody.innerHTML = '';
-        if (data.length === 0) { tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;">Kayıt yok.</td></tr>'; return; }
+        if (data.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;">Kayıt yok.</td></tr>';
+            renderPagination(document.getElementById('companyPaginationContainer'), totalPages, window.companyPage, window.companyPageSize, () => loadCompanies());
+            return;
+        }
 
         const canDelete = window.hasPermission('Companies', 'delete'); // Companies module
 
@@ -2041,6 +2915,20 @@ window.loadCompanies = async function () {
                 </td>`;
             tbody.appendChild(tr);
         });
+
+        if (!document.getElementById('companyPaginationContainer')) {
+            const table = tbody.closest('table');
+            const pagContainer = document.createElement('div');
+            pagContainer.id = 'companyPaginationContainer';
+            pagContainer.className = 'pagination-container';
+            table.parentNode.insertBefore(pagContainer, table.nextSibling);
+        }
+        renderPagination(document.getElementById('companyPaginationContainer'), totalPages, window.companyPage, window.companyPageSize, (newPage, newSize) => {
+            window.companyPage = newPage;
+            window.companyPageSize = newSize;
+            loadCompanies();
+        });
+
     } catch (e) { console.error(e); tbody.innerHTML = '<tr><td colspan="4" style="color:var(--error);">Hata!</td></tr>'; }
 }
 
@@ -2181,15 +3069,23 @@ window.loadProducts = async function () {
         const filter = window.currentStatusFilter['inventory'] || 'active';
         const searchTerm = document.getElementById('inventorySearchInput')?.value || '';
 
-        // Fetch products with status filter and search term
-        const prodRes = await fetch(`${API_BASE_URL}/api/product?status=${filter}&searchTerm=${encodeURIComponent(searchTerm)}`);
+        // Pagination parameters
+        window.productPage = window.productPage || 1;
+        window.productPageSize = window.productPageSize || 10;
+
+        // Fetch products with status filter, search term, and pagination
+        const prodRes = await fetch(`${API_BASE_URL}/api/product?status=${filter}&searchTerm=${encodeURIComponent(searchTerm)}&page=${window.productPage}&pageSize=${window.productPageSize}`);
         if (prodRes.status === 403) {
             tbody.innerHTML = '<tr><td colspan="8" style="color:var(--error); text-align:center;">🚫 Bu verileri görmeye yetkiniz bulunmamaktadır.</td></tr>';
             return;
         }
         if (!prodRes.ok) throw new Error('Ürünler yüklenemedi');
 
-        const products = await prodRes.json();
+        const pagedData = await prodRes.json();
+        const products = pagedData.items || [];
+        const totalCount = pagedData.totalCount || 0;
+        const totalPages = Math.ceil(totalCount / window.productPageSize);
+
 
         // Fetch other data in parallel (status filtering applied there too for consistency)
         const [brands, cats, units, warehouses] = await Promise.all([
@@ -2200,7 +3096,11 @@ window.loadProducts = async function () {
         ]);
 
         tbody.innerHTML = '';
-        if (products.length === 0) { tbody.innerHTML = '<tr><td colspan="9">Kayıt yok.</td></tr>'; return; }
+        if (products.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="9">Kayıt yok.</td></tr>';
+            renderPagination(document.getElementById('productPaginationContainer'), totalPages, window.productPage, window.productPageSize, () => loadProducts());
+            return;
+        }
 
         // Helper to find names
         const getBrandName = (p) => p.brandName || '-';
@@ -2240,6 +3140,21 @@ window.loadProducts = async function () {
             `;
             tbody.appendChild(tr);
         });
+
+        // Add matching pagination container under the table if not existing
+        if (!document.getElementById('productPaginationContainer')) {
+            const table = tbody.closest('table');
+            const pagContainer = document.createElement('div');
+            pagContainer.id = 'productPaginationContainer';
+            pagContainer.className = 'pagination-container';
+            table.parentNode.insertBefore(pagContainer, table.nextSibling);
+        }
+        renderPagination(document.getElementById('productPaginationContainer'), totalPages, window.productPage, window.productPageSize, (newPage, newSize) => {
+            window.productPage = newPage;
+            window.productPageSize = newSize;
+            loadProducts();
+        });
+
     } catch (e) {
         console.error(e);
         tbody.innerHTML = '<tr><td colspan="8" style="color:red;">Hata: ' + e.message + '</td></tr>';
@@ -2407,12 +3322,13 @@ window.openProductModal = async function (id = null) {
 
     try {
         // Load Dropdowns FIRST
-        const [cats, brands, units, warehouses] = await Promise.all([
+        const [cats, brands, units, warehousesRes] = await Promise.all([
             fetch(`${API_BASE_URL}/api/product/categories`).then(r => r.json()),
             fetch(`${API_BASE_URL}/api/product/brands`).then(r => r.json()),
             fetch(`${API_BASE_URL}/api/product/units`).then(r => r.json()),
-            fetch(`${API_BASE_URL}/api/warehouse`).then(r => r.json())
+            fetch(`${API_BASE_URL}/api/warehouse?pageSize=1000`).then(r => r.json())
         ]);
+        const warehouses = Array.isArray(warehousesRes) ? warehousesRes : (warehousesRes.items || []);
 
         const catSel = document.getElementById('pCategory');
         catSel.innerHTML = '<option value="">Kategori Seç...</option>';
@@ -3137,9 +4053,13 @@ window.loadWarehouses = async function () {
 
     if (tables.length === 0) return;
 
+    if (!window.warehousePage) window.warehousePage = 1;
+    if (!window.warehousePageSize) window.warehousePageSize = 10;
+    const searchTerm = ''; // For now, simple search if needed
+
     try {
         const filter = window.currentStatusFilter['inventory'] || 'active';
-        const res = await fetch(`${API_BASE_URL}/api/warehouse?status=${filter}`);
+        const res = await fetch(`${API_BASE_URL}/api/warehouse?status=${filter}&page=${window.warehousePage}&pageSize=${window.warehousePageSize}`);
         if (res.status === 403) {
             tables.forEach(tbody => {
                 tbody.innerHTML = '<tr><td colspan="4" style="color:var(--error); text-align:center;">🚫 Bu verileri görmeye yetkiniz bulunmamaktadır.</td></tr>';
@@ -3148,7 +4068,11 @@ window.loadWarehouses = async function () {
         }
         if (!res.ok) throw new Error('Yükleme hatası');
 
-        const data = await res.json();
+        const pagedData = await res.json();
+        const data = pagedData.items || [];
+        const totalCount = pagedData.totalCount || 0;
+        const totalPages = Math.ceil(totalCount / window.warehousePageSize);
+
         const html = (!data || data.length === 0)
             ? '<tr><td colspan="4">Kayıt yok.</td></tr>'
             : data.map(w => {
@@ -3160,7 +4084,7 @@ window.loadWarehouses = async function () {
                 <tr ${rowStyle}>
                     <td><strong>${w.warehouseName}</strong> ${passiveBadge}</td>
                     <td>${w.location}</td>
-                    <td>${w.companyId}</td>
+                    <td>${w.companyName || w.companyId}</td>
                     <td style="text-align:right;">
                         <div class="action-btn-container">
                             ${canWrite && !w.isDeleted ? `
@@ -3178,6 +4102,17 @@ window.loadWarehouses = async function () {
             }).join('');
 
         tables.forEach(tbody => tbody.innerHTML = html);
+
+        // Render pagination for the main warehouse list if it exists
+        const mainPagination = document.getElementById('warehousePaginationContainer');
+        if (mainPagination) {
+            renderPagination(mainPagination, totalPages, window.warehousePage, window.warehousePageSize, (newPage, newSize) => {
+                window.warehousePage = newPage;
+                window.warehousePageSize = newSize;
+                loadWarehouses();
+            });
+        }
+
     } catch (e) {
         console.error(e);
         tables.forEach(tbody => {
@@ -3195,11 +4130,12 @@ window.openWarehouseModal = async function (id, name, loc, compId) {
     document.getElementById('wLoc').value = loc || '';
 
     // Load Companies
-    const res = await fetch(`${API_BASE_URL}/api/companies`);
-    const data = await res.json();
+    const res = await fetch(`${API_BASE_URL}/api/companies?pageSize=500`);
+    const pagedData = await res.json();
+    const companies = pagedData.items || [];
     const sel = document.getElementById('wCompany');
     sel.innerHTML = '<option value="">Şirket Seç...</option>';
-    data.forEach(c => {
+    companies.forEach(c => {
         const selected = (compId && c.id == compId) ? 'selected' : '';
         sel.innerHTML += `<option value="${c.id}" ${selected}>${c.companyName}</option>`;
     });
@@ -3431,14 +4367,27 @@ window.loadSuppliers = async function () {
     tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;">Yükleniyor...</td></tr>';
     try {
         const filter = window.currentStatusFilter['suppliers'] || 'active';
-        const res = await fetch(`${API_BASE_URL}/api/supplier?status=${filter}`);
+
+        window.supplierPage = window.supplierPage || 1;
+        window.supplierPageSize = window.supplierPageSize || 10;
+
+        const res = await fetch(`${API_BASE_URL}/api/supplier?status=${filter}&page=${window.supplierPage}&pageSize=${window.supplierPageSize}`);
         if (res.status === 403) {
             tbody.innerHTML = '<tr><td colspan="5" style="color:var(--error); text-align:center;">🚫 Yetkisiz Erişim</td></tr>';
             return;
         }
-        const data = await res.json();
+
+        const pagedData = await res.json();
+        const data = pagedData.items || [];
+        const totalCount = pagedData.totalCount || 0;
+        const totalPages = Math.ceil(totalCount / window.supplierPageSize);
+
         tbody.innerHTML = '';
-        if (data.length === 0) { tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;">Kayıt yok.</td></tr>'; return; }
+        if (data.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;">Kayıt yok.</td></tr>';
+            renderPagination(document.getElementById('supplierPaginationContainer'), totalPages, window.supplierPage, window.supplierPageSize, () => loadSuppliers());
+            return;
+        }
 
         const canWrite = window.hasPermission('Supplier', 'write');
         const canDelete = window.hasPermission('Supplier', 'delete');
@@ -3466,6 +4415,20 @@ window.loadSuppliers = async function () {
                 </td>`;
             tbody.appendChild(tr);
         });
+
+        if (!document.getElementById('supplierPaginationContainer')) {
+            const table = tbody.closest('table');
+            const pagContainer = document.createElement('div');
+            pagContainer.id = 'supplierPaginationContainer';
+            pagContainer.className = 'pagination-container';
+            table.parentNode.insertBefore(pagContainer, table.nextSibling);
+        }
+        renderPagination(document.getElementById('supplierPaginationContainer'), totalPages, window.supplierPage, window.supplierPageSize, (newPage, newSize) => {
+            window.supplierPage = newPage;
+            window.supplierPageSize = newSize;
+            loadSuppliers();
+        });
+
     } catch (e) {
         console.error(e);
         tbody.innerHTML = '<tr><td colspan="5" style="color:var(--error); text-align:center;">Hata oluştu!</td></tr>';
@@ -3525,18 +4488,29 @@ window.deleteSupplier = async function (id, name) {
 window.loadPriceLists = async function () {
     const tbody = document.getElementById('priceListBody');
     if (!tbody) return;
+
+    if (!window.priceListPage) window.priceListPage = 1;
+    if (!window.priceListPageSize) window.priceListPageSize = 10;
+    const searchTerm = document.getElementById('search-pricelists')?.value || '';
+
     tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;">Yükleniyor...</td></tr>';
     try {
         const filter = window.currentStatusFilter['pricelists'] || 'active';
-        const res = await fetch(`${API_BASE_URL}/api/pricelist?status=${filter}`);
+        const res = await fetch(`${API_BASE_URL}/api/pricelist?status=${filter}&searchTerm=${encodeURIComponent(searchTerm)}&page=${window.priceListPage}&pageSize=${window.priceListPageSize}`);
         if (res.status === 403) {
             tbody.innerHTML = '<tr><td colspan="7" style="color:var(--error); text-align:center;">🚫 Yetkisiz Erişim</td></tr>';
             return;
         }
-        const data = await res.json();
+
+        const pagedData = await res.json();
+        const data = pagedData.items || [];
+        const totalCount = pagedData.totalCount || 0;
+        const totalPages = Math.ceil(totalCount / window.priceListPageSize);
+
         tbody.innerHTML = '';
         if (data.length === 0) {
             tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;">Henüz fiyat kaydı yok.</td></tr>';
+            renderPagination(document.getElementById('priceListPaginationContainer'), totalPages, window.priceListPage, window.priceListPageSize, () => loadPriceLists());
             return;
         }
 
@@ -3568,6 +4542,19 @@ window.loadPriceLists = async function () {
                 </td>`;
             tbody.appendChild(tr);
         });
+
+        if (!document.getElementById('priceListPaginationContainer')) {
+            const container = document.createElement('div');
+            container.id = 'priceListPaginationContainer';
+            tbody.closest('.glass-card').appendChild(container);
+        }
+
+        renderPagination(document.getElementById('priceListPaginationContainer'), totalPages, window.priceListPage, window.priceListPageSize, (newPage, newSize) => {
+            window.priceListPage = newPage;
+            window.priceListPageSize = newSize;
+            loadPriceLists();
+        });
+
     } catch (e) { console.error(e); tbody.innerHTML = '<tr><td colspan="7" style="color:var(--error); text-align:center;">Hata oluştu!</td></tr>'; }
 }
 
@@ -3583,10 +4570,13 @@ window.openPriceListModal = async function (id = null) {
     sSel.innerHTML = '<option value="">Yükleniyor...</option>';
 
     try {
-        const [products, suppliers] = await Promise.all([
-            fetch(`${API_BASE_URL}/api/product`).then(r => r.json()),
-            fetch(`${API_BASE_URL}/api/supplier`).then(r => r.json())
+        const [productsRes, suppliersRes] = await Promise.all([
+            fetch(`${API_BASE_URL}/api/product?pageSize=1000`).then(r => r.json()),
+            fetch(`${API_BASE_URL}/api/supplier?pageSize=1000`).then(r => r.json())
         ]);
+
+        const products = Array.isArray(productsRes) ? productsRes : (productsRes.items || []);
+        const suppliers = Array.isArray(suppliersRes) ? suppliersRes : (suppliersRes.items || []);
 
         pSel.innerHTML = '<option value="">Ürün Seçin...</option>';
         products.forEach(p => pSel.innerHTML += `<option value="${p.id}">${p.productCode} - ${p.productName}</option>`);
@@ -3666,17 +4656,31 @@ window.deletePriceList = async function (id) {
 window.loadCustomerCompanies = async function () {
     const tbody = document.getElementById('customerCompanyListBody');
     if (!tbody) return;
+
+    if (!window.customerCompanyPage) window.customerCompanyPage = 1;
+    if (!window.customerCompanyPageSize) window.customerCompanyPageSize = 10;
+    const searchTerm = document.getElementById('search-customer-companies')?.value || '';
+
     tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;">Yükleniyor...</td></tr>';
     try {
         const filter = window.currentStatusFilter['customer-companies'] || 'active';
-        const res = await fetch(`${API_BASE_URL}/api/customer/companies?status=${filter}`);
+        const res = await fetch(`${API_BASE_URL}/api/customer/companies?status=${filter}&searchTerm=${encodeURIComponent(searchTerm)}&page=${window.customerCompanyPage}&pageSize=${window.customerCompanyPageSize}`);
         if (res.status === 403) {
             tbody.innerHTML = '<tr><td colspan="4" style="color:var(--error); text-align:center;">🚫 Yetkisiz Erişim</td></tr>';
             return;
         }
-        const data = await res.json();
+
+        const pagedData = await res.json();
+        const data = pagedData.items || [];
+        const totalCount = pagedData.totalCount || 0;
+        const totalPages = Math.ceil(totalCount / window.customerCompanyPageSize);
+
         tbody.innerHTML = '';
-        if (data.length === 0) { tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;">Kayıt yok.</td></tr>'; return; }
+        if (data.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;">Kayıt yok.</td></tr>';
+            renderPagination(document.getElementById('customerCompanyPaginationContainer'), totalPages, window.customerCompanyPage, window.customerCompanyPageSize, () => loadCustomerCompanies());
+            return;
+        }
 
         const canWrite = window.hasPermission('Customer', 'write');
         const canDelete = window.hasPermission('Customer', 'delete');
@@ -3703,6 +4707,19 @@ window.loadCustomerCompanies = async function () {
                 </td>`;
             tbody.appendChild(tr);
         });
+
+        if (!document.getElementById('customerCompanyPaginationContainer')) {
+            const container = document.createElement('div');
+            container.id = 'customerCompanyPaginationContainer';
+            tbody.closest('.glass-card').appendChild(container);
+        }
+
+        renderPagination(document.getElementById('customerCompanyPaginationContainer'), totalPages, window.customerCompanyPage, window.customerCompanyPageSize, (newPage, newSize) => {
+            window.customerCompanyPage = newPage;
+            window.customerCompanyPageSize = newSize;
+            loadCustomerCompanies();
+        });
+
     } catch (e) { console.error(e); tbody.innerHTML = '<tr><td colspan="4" style="color:var(--error); text-align:center;">Hata oluştu!</td></tr>'; }
 }
 
@@ -3755,17 +4772,31 @@ window.deleteCustomerCompany = async function (id, name) {
 window.loadCustomers = async function () {
     const tbody = document.getElementById('customerListBody');
     if (!tbody) return;
+
+    if (!window.customerPage) window.customerPage = 1;
+    if (!window.customerPageSize) window.customerPageSize = 10;
+    const searchTerm = document.getElementById('search-customers')?.value || '';
+
     tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;">Yükleniyor...</td></tr>';
     try {
         const filter = window.currentStatusFilter['customers'] || 'active';
-        const res = await fetch(`${API_BASE_URL}/api/customer?status=${filter}`);
+        const res = await fetch(`${API_BASE_URL}/api/customer?status=${filter}&searchTerm=${encodeURIComponent(searchTerm)}&page=${window.customerPage}&pageSize=${window.customerPageSize}`);
         if (res.status === 403) {
             tbody.innerHTML = '<tr><td colspan="5" style="color:var(--error); text-align:center;">🚫 Yetkisiz Erişim</td></tr>';
             return;
         }
-        const data = await res.json();
+
+        const pagedData = await res.json();
+        const data = pagedData.items || [];
+        const totalCount = pagedData.totalCount || 0;
+        const totalPages = Math.ceil(totalCount / window.customerPageSize);
+
         tbody.innerHTML = '';
-        if (data.length === 0) { tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;">Kayıt yok.</td></tr>'; return; }
+        if (data.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;">Kayıt yok.</td></tr>';
+            renderPagination(document.getElementById('customerPaginationContainer'), totalPages, window.customerPage, window.customerPageSize, () => loadCustomers());
+            return;
+        }
 
         const canWrite = window.hasPermission('Customer', 'write');
         const canDelete = window.hasPermission('Customer', 'delete');
@@ -3793,7 +4824,20 @@ window.loadCustomers = async function () {
                 </td>`;
             tbody.appendChild(tr);
         });
-    } catch (e) { console.error(e); tbody.innerHTML = '<tr><td colspan="5" style="color:var(--error); text-align:center;">Hata oluştu!</td></tr>'; }
+
+        if (!document.getElementById('customerPaginationContainer')) {
+            const container = document.createElement('div');
+            container.id = 'customerPaginationContainer';
+            tbody.closest('.glass-card').appendChild(container);
+        }
+
+        renderPagination(document.getElementById('customerPaginationContainer'), totalPages, window.customerPage, window.customerPageSize, (newPage, newSize) => {
+            window.customerPage = newPage;
+            window.customerPageSize = newSize;
+            loadCustomers();
+        });
+
+    } catch (e) { console.error(e); tbody.innerHTML = '<tr><td colspan="6" style="color:var(--error); text-align:center;">Hata oluştu!</td></tr>'; }
 }
 
 window.openCustomerModal = async function (id = null) {
@@ -3806,9 +4850,10 @@ window.openCustomerModal = async function (id = null) {
 
     try {
         console.log("Fetching customer companies...");
-        const res = await fetch(`${API_BASE_URL}/api/customer/companies`);
+        const res = await fetch(`${API_BASE_URL}/api/customer/companies?pageSize=500`);
         if (!res.ok) throw new Error("Şirket listesi alınamadı: " + res.status);
-        const companies = await res.json();
+        const pagedData = await res.json();
+        const companies = pagedData.items || [];
         console.log("Companies received:", companies);
 
         compSel.innerHTML = '<option value="">Şirket Seçin...</option>';
@@ -3898,27 +4943,24 @@ window.startOfferWizard = async function () {
     try {
         // Load lists for Step 1
         const [resCust, resWh, resCat] = await Promise.all([
-            fetch(`${API_BASE_URL}/api/customer`),
-            fetch(`${API_BASE_URL}/api/warehouse`),
+            fetch(`${API_BASE_URL}/api/customer?pageSize=1000`),
+            fetch(`${API_BASE_URL}/api/warehouse?pageSize=1000`),
             fetch(`${API_BASE_URL}/api/product/categories`)
         ]);
 
-        if (!resCust.ok) {
-            const err = await resCust.json();
-            throw new Error(`Müşteri listesi alınamadı: ${err.message || resCust.statusText}`);
-        }
-        if (!resWh.ok) {
-            const err = await resWh.json();
-            throw new Error(`Depo listesi alınamadı: ${err.message || resWh.statusText}`);
-        }
-        if (!resCat.ok) {
-            const err = await resCat.json();
-            throw new Error(`Kategori listesi alınamadı: ${err.message || resCat.statusText}`);
+        if (!resCust.ok || !resWh.ok || !resCat.ok) {
+            throw new Error("Veriler yüklenemedi. Lütfen bağlantınızı kontrol edin.");
         }
 
-        wizardState.customers = await resCust.json();
-        wizardState.warehouses = await resWh.json();
-        wizardState.categories = await resCat.json();
+        const [pagedCust, pagedWh, pagedCat] = await Promise.all([
+            resCust.json(),
+            resWh.json(),
+            resCat.json()
+        ]);
+
+        wizardState.customers = Array.isArray(pagedCust) ? pagedCust : (pagedCust.items || []);
+        wizardState.warehouses = Array.isArray(pagedWh) ? pagedWh : (pagedWh.items || []);
+        wizardState.categories = pagedCat;
     } catch (e) {
         alert("Bağlantı veya Yetki Hatası: " + e.message);
         console.error("Wizard Load Error:", e);
@@ -4020,8 +5062,9 @@ async function loadWizardProducts() {
 
     try {
         const catFilter = document.getElementById('wKategori')?.value || '';
-        const res = await fetch(`${API_BASE_URL}/api/product`);
-        let products = await res.json();
+        const res = await fetch(`${API_BASE_URL}/api/product?pageSize=1000`);
+        const pagedData = await res.json();
+        let products = Array.isArray(pagedData) ? pagedData : (pagedData.items || []);
 
         if (catFilter) {
             products = products.filter(p => p.categoryId == catFilter);
@@ -4546,8 +5589,9 @@ window.openShelfModal = async function () {
 
 async function loadShelfWarehouses() {
     const sel = document.getElementById('shelfWarehouseId');
-    const res = await fetch(`${API_BASE_URL}/api/warehouse`);
-    const warehouses = await res.json();
+    const res = await fetch(`${API_BASE_URL}/api/warehouse?pageSize=1000`);
+    const paged = await res.json();
+    const warehouses = Array.isArray(paged) ? paged : (paged.items || []);
     sel.innerHTML = warehouses.map(w => `<option value="${w.id}">${w.warehouseName}</option>`).join('');
 }
 
@@ -4602,20 +5646,24 @@ window.loadPendingDeliveries = async function () {
                 <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:1rem;">
                     <div>
                         <h4 style="margin:0;">#${inv.invoiceNumber}</h4>
-                        <small style="color:var(--muted);">${inv.buyerCompanyName}</small>
+                            <small style="color:var(--muted);">${inv.buyerCompanyName}</small>
+                        </div>
+                        <span class="badge" style="background:${inv.status === 7 ? '#fef3c7' : (inv.status === 9 ? '#fee2e2' : '#e0e7ff')}; color:${inv.status === 7 ? '#92400e' : (inv.status === 9 ? '#991b1b' : '#3730a3')};">
+                            ${inv.status === 7 ? 'Hazırlanıyor' : (inv.status === 9 ? 'Yarım Kaldı (Bekliyor)' : 'Sıraya Girdi')}
+                        </span>
                     </div>
-                    <span class="badge" style="background:${inv.status === 7 ? '#fef3c7' : '#e0e7ff'}; color:${inv.status === 7 ? '#92400e' : '#3730a3'};">
-                        ${inv.status === 7 ? 'Hazırlanıyor' : 'Sıraya Girdi'}
-                    </span>
-                </div>
                 <div style="font-size:0.9rem; margin-bottom:1rem;">
                     <div><strong>Tarih:</strong> ${new Date(inv.invoiceDate).toLocaleDateString()}</div>
                     <div><strong>Ürün Sayısı:</strong> ${inv.items.length} Kalem</div>
                     ${inv.assignedDelivererUserName ? `<div><strong>Sorumlu:</strong> ${inv.assignedDelivererUserName}</div>` : ''}
                 </div>
-                <div style="display:flex; gap:0.5rem;">
+                <div style="display:flex; gap:0.5rem; flex-wrap:wrap;">
                     ${!inv.assignedDelivererUserId ? `<button class="btn-primary" onclick="assignJob(${inv.id})">📦 İşi Üstlen</button>` : ''}
-                    ${inv.assignedDelivererUserId ? `<button class="btn-primary" style="background:var(--success);" onclick="openPrepModal(${inv.id})">🔍 Hazırla / Çıkış Yap</button>` : ''}
+                    ${(inv.assignedDelivererUserId) ? `
+                        <button class="btn-primary" style="background:var(--success); flex:1;" onclick="openPrepModal(${inv.id})">🔍 Hazırla</button>
+                        <button class="btn-primary" style="background:#8b5cf6; flex:1;" onclick="openTransferModal(${inv.id})">🔄 Devret</button>
+                        <button class="btn-primary" style="background:#ef4444; flex:1;" onclick="unassignJob(${inv.id})">❌ Bırak</button>
+                    ` : ''}
                 </div>
             `;
             container.appendChild(card);
@@ -4634,6 +5682,66 @@ window.assignJob = async function (id) {
         else showToast('Atama başarısız', 'error');
     } catch (e) { showToast(e.message, 'error'); }
 };
+
+window.unassignJob = async function (id) {
+    if (!confirm('Bu işi açığa çıkartmak (havuza geri bırakmak) istediğinize emin misiniz?')) return;
+    try {
+        const res = await fetch(`${API_BASE_URL}/api/invoice/${id}/unassign`, { method: 'POST' });
+        if (res.ok) {
+            showToast('İş açığa çıkarıldı', 'success');
+            loadPendingDeliveries();
+        }
+        else {
+            const err = await res.text();
+            showToast('İşlem başarısız: ' + err, 'error');
+        }
+    } catch (e) { showToast(e.message, 'error'); }
+};
+
+window.openTransferModal = async function (id) {
+    document.getElementById('transferInvoiceId').value = id;
+    const targetSel = document.getElementById('transferTargetUser');
+    targetSel.innerHTML = '<option value="">Yükleniyor...</option>';
+    document.getElementById('transferActionModal').style.display = 'flex';
+
+    try {
+        // Personel listesini çek
+        const res = await fetch(`${API_BASE_URL}/api/users?module=Warehouse&pageSize=500`);
+        if (!res.ok) throw new Error('Kullanıcılar getirilemedi.');
+        const pagedData = await res.json();
+        const users = pagedData.items || [];
+        const currentUser = JSON.parse(localStorage.getItem('user'));
+
+        targetSel.innerHTML = '<option value="">-- Personel Seçin --</option>';
+        users.forEach(u => {
+            if (u.id === currentUser.id) return; // Kendine devredemez
+            targetSel.innerHTML += `<option value="${u.id}">${u.firstName} ${u.lastName} (${u.role})</option>`;
+        });
+    } catch (e) {
+        showToast(e.message, 'error');
+        targetSel.innerHTML = '<option value="">Hata!</option>';
+    }
+};
+
+window.confirmTransferJob = async function () {
+    const invId = document.getElementById('transferInvoiceId').value;
+    const toUserId = document.getElementById('transferTargetUser').value;
+    if (!toUserId) return showToast('Lütfen devralacak bir personel seçiniz', 'warning');
+
+    if (!confirm('Görevi seçili personele devretmek istediğinize emin misiniz?')) return;
+
+    try {
+        const res = await fetch(`${API_BASE_URL}/api/invoice/${invId}/transfer?toUserId=${toUserId}`, { method: 'POST' });
+        if (res.ok) {
+            showToast('İş başarıyla devredildi', 'success');
+            closeModal('transferActionModal');
+            loadPendingDeliveries();
+        } else {
+            const err = await res.text();
+            showToast('Devretme işlemi başarısız: ' + err, 'error');
+        }
+    } catch (e) { showToast(e.message, 'error'); }
+}
 
 let prepState = {
     invoice: null,
@@ -4790,6 +5898,28 @@ window.completePrep = async function () {
         } else {
             const err = await res.text();
             showToast('Tamamlanamadı: ' + err, 'error');
+        }
+    } catch (e) { showToast(e.message, 'error'); }
+};
+
+window.incompletePrep = async function () {
+    if (!prepState.invoice) return;
+
+    if (!confirm('Devam eden bu işi yarım (eksik) olarak beklemeye almak istiyor musunuz?')) return;
+
+    try {
+        const res = await fetch(`${API_BASE_URL}/api/invoice/${prepState.invoice.id}/incomplete`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' }
+        });
+
+        if (res.ok) {
+            closeModal('warehousePrepModal');
+            loadPendingDeliveries(); // Tabloyu yeniler, ancak bu fatura listeye bir daha düşecek mi? Sadece statüsü değişir, listeden de düşmesini istiyorsak PendingDeliveries sorgusuna 'PartiallyDelivered' durumunu kontrol eden bir filtre lazımdır. Eklendi/eklenecektir.
+            showToast('Sevkiyat yarım olarak beklemeye alındı.', 'success');
+        } else {
+            const err = await res.text();
+            showToast('Marking incomplete failed: ' + err, 'error');
         }
     } catch (e) { showToast(e.message, 'error'); }
 };

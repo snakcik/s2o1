@@ -21,9 +21,9 @@ namespace S2O1.API.Controllers
 
         [HttpGet("companies")]
         [Filters.Permission(new[] { "Customer", "Offers" }, "Read")]
-        public async Task<ActionResult<IEnumerable<CustomerCompanyDto>>> GetAllCompanies([FromQuery] string? status = null)
+        public async Task<IActionResult> GetAllCompanies([FromQuery] string? status = null, [FromQuery] string? searchTerm = null, [FromQuery] int page = 1, [FromQuery] int pageSize = 10)
         {
-            var result = await _customerService.GetAllCompaniesAsync(status);
+            var result = await _customerService.GetAllCompaniesAsync(status, searchTerm, page, pageSize);
             return Ok(result);
         }
 
@@ -66,9 +66,9 @@ namespace S2O1.API.Controllers
 
         [HttpGet]
         [Filters.Permission(new[] { "Customer", "Offers" }, "Read")]
-        public async Task<ActionResult<IEnumerable<CustomerDto>>> GetAllCustomers([FromQuery] string? status = null)
+        public async Task<IActionResult> GetAllCustomers([FromQuery] string? status = null, [FromQuery] string? searchTerm = null, [FromQuery] int page = 1, [FromQuery] int pageSize = 10)
         {
-            var result = await _customerService.GetAllCustomersAsync(status);
+            var result = await _customerService.GetAllCustomersAsync(status, searchTerm, page, pageSize);
             return Ok(result);
         }
 

@@ -91,8 +91,9 @@ namespace S2O1.Business.Services.Implementation
                 };
 
                 // Calculate Totals
-                invoice.GrandTotal = invoice.Items.Sum(i => i.TotalPrice);
-                invoice.TaxTotal = invoice.GrandTotal * 0.18m; // Dummy tax logic
+                var subTotal = invoice.Items.Sum(i => i.TotalPrice);
+                invoice.TaxTotal = invoice.Items.Sum(i => i.TotalPrice * (i.VatRate / 100m));
+                invoice.GrandTotal = subTotal + invoice.TaxTotal;
 
                 await _unitOfWork.Repository<Invoice>().AddAsync(invoice);
                 await _unitOfWork.SaveChangesAsync(); // Get ID
@@ -209,7 +210,7 @@ namespace S2O1.Business.Services.Implementation
                                (p.CanRead || p.IsFull));
         }
 
-        public async Task<System.Collections.Generic.IEnumerable<InvoiceDto>> GetAllAsync(string? status = null)
+        public async Task<S2O1.Business.DTOs.Common.PagedResultDto<InvoiceDto>> GetAllAsync(string? status = null, string? searchTerm = null, int page = 1, int pageSize = 10)
         {
             var canSeeDeleted = await CanSeeDeletedAsync();
             var query = _unitOfWork.Repository<Invoice>().Query();
@@ -240,8 +241,27 @@ namespace S2O1.Business.Services.Implementation
                     .Where(x => !x.IsDeleted);
             }
 
-            var invoices = await query.OrderByDescending(x => x.Id).ToListAsync();
-            return _mapper.Map<System.Collections.Generic.IEnumerable<InvoiceDto>>(invoices);
+            if (!string.IsNullOrWhiteSpace(searchTerm))
+            {
+                var search = searchTerm.ToLower();
+                query = query.Where(x => x.InvoiceNumber.ToLower().Contains(search));
+            }
+
+            var totalCount = await query.CountAsync();
+            var invoices = await query.OrderByDescending(x => x.Id)
+                .Skip((page - 1) * pageSize)
+                .Take(pageSize)
+                .ToListAsync();
+
+            var mapped = _mapper.Map<IEnumerable<InvoiceDto>>(invoices);
+
+            return new S2O1.Business.DTOs.Common.PagedResultDto<InvoiceDto>
+            {
+                Items = mapped,
+                TotalCount = totalCount,
+                PageNumber = page,
+                PageSize = pageSize
+            };
         }
 
         public async Task<System.Collections.Generic.IEnumerable<InvoiceDto>> GetPendingDeliveriesAsync()
@@ -252,7 +272,7 @@ namespace S2O1.Business.Services.Implementation
                 .Include(i => i.SellerCompany)
                 .Include(i => i.BuyerCompany)
                 .Include(i => i.Offer).ThenInclude(o => o.Customer).ThenInclude(c => c.CustomerCompany)
-                .Where(i => i.Status == InvoiceStatus.WaitingForWarehouse || i.Status == InvoiceStatus.InPreparation)
+                .Where(i => i.Status == InvoiceStatus.WaitingForWarehouse || i.Status == InvoiceStatus.InPreparation || i.Status == InvoiceStatus.PartiallyDelivered)
                 .OrderByDescending(x => x.Id)
                 .ToListAsync();
             
@@ -266,8 +286,74 @@ namespace S2O1.Business.Services.Implementation
 
             invoice.Status = InvoiceStatus.InPreparation;
             invoice.AssignedDelivererUserId = userId;
+            invoice.WarehouseAssignedDate = DateTime.Now;
             
             _unitOfWork.Repository<Invoice>().Update(invoice);
+
+            var log = new InvoiceStatusLog 
+            {
+                InvoiceId = invoiceId,
+                UserId = userId,
+                Action = "Assigned",
+                Status = "InPreparation",
+                LogDate = DateTime.Now
+            };
+            await _unitOfWork.Repository<InvoiceStatusLog>().AddAsync(log);
+
+            await _unitOfWork.SaveChangesAsync();
+            return true;
+        }
+
+        public async Task<bool> TransferJobAsync(int invoiceId, int toUserId)
+        {
+            var invoice = await _unitOfWork.Repository<Invoice>().GetByIdAsync(invoiceId);
+            if (invoice == null) return false;
+
+            var oldUser = invoice.AssignedDelivererUserId;
+            invoice.AssignedDelivererUserId = toUserId;
+            // Biz burada süre ölçerken ilk alınma zamanını bozmamak için AssignedDate'i ezmiyoruz, loglardan devir vakitlerini analiz edeceğiz
+            invoice.WarehouseIncompleteDate = DateTime.Now; // devredildiği an beklemeye düşmüş gibi sayılır/veya iz olarak kalır
+            
+            _unitOfWork.Repository<Invoice>().Update(invoice);
+
+            var log = new InvoiceStatusLog 
+            {
+                InvoiceId = invoiceId,
+                UserId = toUserId,
+                Action = "Transferred From " + (oldUser?.ToString() ?? "Unknown"),
+                Status = invoice.Status.ToString(),
+                LogDate = DateTime.Now
+            };
+            await _unitOfWork.Repository<InvoiceStatusLog>().AddAsync(log);
+
+            await _unitOfWork.SaveChangesAsync();
+            return true;
+        }
+
+        public async Task<bool> UnassignJobAsync(int invoiceId)
+        {
+            var invoice = await _unitOfWork.Repository<Invoice>().GetByIdAsync(invoiceId);
+            if (invoice == null) return false;
+
+            var oldUser = invoice.AssignedDelivererUserId;
+            invoice.Status = InvoiceStatus.WaitingForWarehouse;
+            invoice.AssignedDelivererUserId = null;
+            // İş tekrar havuza düştü. Assigndate sıfırlanabilir.
+            invoice.WarehouseAssignedDate = null;
+            invoice.WarehouseIncompleteDate = null;
+
+            _unitOfWork.Repository<Invoice>().Update(invoice);
+
+            var log = new InvoiceStatusLog 
+            {
+                InvoiceId = invoiceId,
+                UserId = oldUser, // Eski kullanıcının bıraktığını raporlar
+                Action = "Unassigned",
+                Status = "WaitingForWarehouse",
+                LogDate = DateTime.Now
+            };
+            await _unitOfWork.Repository<InvoiceStatusLog>().AddAsync(log);
+
             await _unitOfWork.SaveChangesAsync();
             return true;
         }
@@ -289,6 +375,7 @@ namespace S2O1.Business.Services.Implementation
                 invoice.Status = InvoiceStatus.Delivered;
                 invoice.ReceiverName = dto.ReceiverName;
                 invoice.AssignedDelivererUserId = dto.DelivererUserId;
+                invoice.WarehouseCompletedDate = DateTime.Now;
                 _unitOfWork.Repository<Invoice>().Update(invoice);
 
                 // Create Dispatch Note (İrsaliye)
@@ -355,6 +442,19 @@ namespace S2O1.Business.Services.Implementation
                 await transaction.RollbackAsync();
                 throw;
             }
+        }
+
+        public async Task<bool> MarkAsIncompleteAsync(int invoiceId)
+        {
+            var invoice = await _unitOfWork.Repository<Invoice>().GetByIdAsync(invoiceId);
+            if (invoice == null) return false;
+
+            invoice.Status = InvoiceStatus.PartiallyDelivered;
+            invoice.WarehouseIncompleteDate = DateTime.Now;
+            
+            _unitOfWork.Repository<Invoice>().Update(invoice);
+            await _unitOfWork.SaveChangesAsync();
+            return true;
         }
     }
 }

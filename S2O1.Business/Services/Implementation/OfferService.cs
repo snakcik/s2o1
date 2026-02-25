@@ -61,7 +61,11 @@ namespace S2O1.Business.Services.Implementation
                 throw new Exception("Offer must be Approved before invoicing."); // Or allow creating invoice directly? Usually Approved.
 
             // Load Items
-            var items = await _unitOfWork.Repository<OfferItem>().FindAsync(i => i.OfferId == offerId);
+            var items = await _unitOfWork.Repository<OfferItem>().Query()
+                .Include(i => i.Product)
+                    .ThenInclude(p => p.PriceLists)
+                .Where(i => i.OfferId == offerId)
+                .ToListAsync();
             
             // Resolve Company IDs
             var user = await _unitOfWork.Repository<User>().GetByIdAsync(userId);
@@ -95,7 +99,7 @@ namespace S2O1.Business.Services.Implementation
                     ProductId = i.ProductId,
                     Quantity = i.Quantity,
                     UnitPrice = i.UnitPrice,
-                    VatRate = 18 
+                    VatRate = i.Product?.PriceLists?.FirstOrDefault(pl => pl.IsActivePrice)?.VatRate ?? 20 // Default fallback
                 }).ToList()
             };
 
@@ -118,7 +122,7 @@ namespace S2O1.Business.Services.Implementation
                                (p.CanRead || p.IsFull));
         }
 
-        public async Task<IEnumerable<S2O1.Business.DTOs.Stock.OfferDto>> GetAllAsync(string? status = null)
+        public async Task<S2O1.Business.DTOs.Common.PagedResultDto<S2O1.Business.DTOs.Stock.OfferDto>> GetAllAsync(string? status = null, string? searchTerm = null, int page = 1, int pageSize = 10)
         {
             var canSeeDeleted = await CanSeeDeletedAsync();
             var query = _unitOfWork.Repository<Offer>().Query();
@@ -149,8 +153,27 @@ namespace S2O1.Business.Services.Implementation
                     .Where(x => !x.IsDeleted);
             }
 
-            var offers = await query.OrderByDescending(x => x.Id).ToListAsync();
-            return _mapper.Map<IEnumerable<S2O1.Business.DTOs.Stock.OfferDto>>(offers);
+            if (!string.IsNullOrWhiteSpace(searchTerm))
+            {
+                var search = searchTerm.ToLower();
+                query = query.Where(x => x.OfferNumber.ToLower().Contains(search) || x.Customer.CustomerContactPersonName.ToLower().Contains(search));
+            }
+
+            var totalCount = await query.CountAsync();
+            var offers = await query.OrderByDescending(x => x.Id)
+                .Skip((page - 1) * pageSize)
+                .Take(pageSize)
+                .ToListAsync();
+
+            var mapped = _mapper.Map<IEnumerable<S2O1.Business.DTOs.Stock.OfferDto>>(offers);
+
+            return new S2O1.Business.DTOs.Common.PagedResultDto<S2O1.Business.DTOs.Stock.OfferDto>
+            {
+                Items = mapped,
+                TotalCount = totalCount,
+                PageNumber = page,
+                PageSize = pageSize
+            };
         }
 
         public async Task<S2O1.Business.DTOs.Stock.OfferDto> GetByIdAsync(int id)

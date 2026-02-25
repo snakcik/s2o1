@@ -3,6 +3,7 @@ using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using S2O1.DataAccess.Contexts;
 
@@ -11,9 +12,11 @@ using S2O1.DataAccess.Contexts;
 namespace S2O1.DataAccess.Migrations
 {
     [DbContext(typeof(S2O1DbContext))]
-    partial class S2O1DbContextModelSnapshot : ModelSnapshot
+    [Migration("20260224114011_AddSystemQueueTasks")]
+    partial class AddSystemQueueTasks
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -91,7 +94,7 @@ namespace S2O1.DataAccess.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("AuditLogs", (string)null);
+                    b.ToTable("AuditLogs");
                 });
 
             modelBuilder.Entity("S2O1.Domain.Entities.Brand", b =>
@@ -129,7 +132,7 @@ namespace S2O1.DataAccess.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("Brands", (string)null);
+                    b.ToTable("Brands");
                 });
 
             modelBuilder.Entity("S2O1.Domain.Entities.Category", b =>
@@ -169,7 +172,7 @@ namespace S2O1.DataAccess.Migrations
 
                     b.HasIndex("ParentCategoryId");
 
-                    b.ToTable("Categories", (string)null);
+                    b.ToTable("Categories");
                 });
 
             modelBuilder.Entity("S2O1.Domain.Entities.Company", b =>
@@ -210,7 +213,7 @@ namespace S2O1.DataAccess.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("Companies", (string)null);
+                    b.ToTable("Companies");
                 });
 
             modelBuilder.Entity("S2O1.Domain.Entities.Customer", b =>
@@ -259,7 +262,7 @@ namespace S2O1.DataAccess.Migrations
 
                     b.HasIndex("CustomerCompanyId");
 
-                    b.ToTable("Customers", (string)null);
+                    b.ToTable("Customers");
                 });
 
             modelBuilder.Entity("S2O1.Domain.Entities.CustomerCompany", b =>
@@ -299,7 +302,7 @@ namespace S2O1.DataAccess.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("CustomerCompanies", (string)null);
+                    b.ToTable("CustomerCompanies");
                 });
 
             modelBuilder.Entity("S2O1.Domain.Entities.DispatchNote", b =>
@@ -366,7 +369,7 @@ namespace S2O1.DataAccess.Migrations
 
                     b.HasIndex("CustomerId");
 
-                    b.ToTable("DispatchNotes", (string)null);
+                    b.ToTable("DispatchNotes");
                 });
 
             modelBuilder.Entity("S2O1.Domain.Entities.DispatchNoteItem", b =>
@@ -411,7 +414,7 @@ namespace S2O1.DataAccess.Migrations
 
                     b.HasIndex("ProductId");
 
-                    b.ToTable("DispatchNoteItems", (string)null);
+                    b.ToTable("DispatchNoteItems");
                 });
 
             modelBuilder.Entity("S2O1.Domain.Entities.Invoice", b =>
@@ -494,7 +497,7 @@ namespace S2O1.DataAccess.Migrations
 
                     b.HasIndex("SellerCompanyId");
 
-                    b.ToTable("Invoices", (string)null);
+                    b.ToTable("Invoices");
                 });
 
             modelBuilder.Entity("S2O1.Domain.Entities.InvoiceItem", b =>
@@ -547,7 +550,7 @@ namespace S2O1.DataAccess.Migrations
 
                     b.HasIndex("ProductId");
 
-                    b.ToTable("InvoiceItems", (string)null);
+                    b.ToTable("InvoiceItems");
                 });
 
             modelBuilder.Entity("S2O1.Domain.Entities.LicenseInfo", b =>
@@ -594,7 +597,7 @@ namespace S2O1.DataAccess.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("LicenseInfos", (string)null);
+                    b.ToTable("LicenseInfos");
                 });
 
             modelBuilder.Entity("S2O1.Domain.Entities.Module", b =>
@@ -626,7 +629,7 @@ namespace S2O1.DataAccess.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("Modules", (string)null);
+                    b.ToTable("Modules");
                 });
 
             modelBuilder.Entity("S2O1.Domain.Entities.Offer", b =>
@@ -685,7 +688,7 @@ namespace S2O1.DataAccess.Migrations
 
                     b.HasIndex("CustomerId");
 
-                    b.ToTable("Offers", (string)null);
+                    b.ToTable("Offers");
                 });
 
             modelBuilder.Entity("S2O1.Domain.Entities.OfferItem", b =>
@@ -736,7 +739,7 @@ namespace S2O1.DataAccess.Migrations
 
                     b.HasIndex("ProductId");
 
-                    b.ToTable("OfferItems", (string)null);
+                    b.ToTable("OfferItems");
                 });
 
             modelBuilder.Entity("S2O1.Domain.Entities.PriceList", b =>
@@ -799,7 +802,7 @@ namespace S2O1.DataAccess.Migrations
 
                     b.HasIndex("SupplierId");
 
-                    b.ToTable("PriceLists", (string)null);
+                    b.ToTable("PriceLists");
                 });
 
             modelBuilder.Entity("S2O1.Domain.Entities.Product", b =>
@@ -887,7 +890,7 @@ namespace S2O1.DataAccess.Migrations
                         .IsUnique()
                         .HasFilter("[WarehouseId] IS NOT NULL");
 
-                    b.ToTable("Products", (string)null);
+                    b.ToTable("Products");
                 });
 
             modelBuilder.Entity("S2O1.Domain.Entities.ProductLocation", b =>
@@ -928,7 +931,7 @@ namespace S2O1.DataAccess.Migrations
 
                     b.HasIndex("WarehouseId");
 
-                    b.ToTable("ProductLocations", (string)null);
+                    b.ToTable("ProductLocations");
                 });
 
             modelBuilder.Entity("S2O1.Domain.Entities.ProductUnit", b =>
@@ -967,7 +970,7 @@ namespace S2O1.DataAccess.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("ProductUnits", (string)null);
+                    b.ToTable("ProductUnits");
                 });
 
             modelBuilder.Entity("S2O1.Domain.Entities.Role", b =>
@@ -999,7 +1002,7 @@ namespace S2O1.DataAccess.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("Roles", (string)null);
+                    b.ToTable("Roles");
                 });
 
             modelBuilder.Entity("S2O1.Domain.Entities.StockAlert", b =>
@@ -1041,7 +1044,7 @@ namespace S2O1.DataAccess.Migrations
 
                     b.HasIndex("ProductId");
 
-                    b.ToTable("StockAlerts", (string)null);
+                    b.ToTable("StockAlerts");
                 });
 
             modelBuilder.Entity("S2O1.Domain.Entities.StockMovement", b =>
@@ -1119,7 +1122,7 @@ namespace S2O1.DataAccess.Migrations
 
                     b.HasIndex("WarehouseId");
 
-                    b.ToTable("StockMovements", (string)null);
+                    b.ToTable("StockMovements");
                 });
 
             modelBuilder.Entity("S2O1.Domain.Entities.Supplier", b =>
@@ -1163,7 +1166,7 @@ namespace S2O1.DataAccess.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("Suppliers", (string)null);
+                    b.ToTable("Suppliers");
                 });
 
             modelBuilder.Entity("S2O1.Domain.Entities.SystemQueueTask", b =>
@@ -1212,7 +1215,7 @@ namespace S2O1.DataAccess.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("SystemQueueTasks", (string)null);
+                    b.ToTable("SystemQueueTasks");
                 });
 
             modelBuilder.Entity("S2O1.Domain.Entities.SystemSetting", b =>
@@ -1254,7 +1257,7 @@ namespace S2O1.DataAccess.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("SystemSettings", (string)null);
+                    b.ToTable("SystemSettings");
                 });
 
             modelBuilder.Entity("S2O1.Domain.Entities.Title", b =>
@@ -1291,7 +1294,7 @@ namespace S2O1.DataAccess.Migrations
 
                     b.HasIndex("CompanyId");
 
-                    b.ToTable("Titles", (string)null);
+                    b.ToTable("Titles");
                 });
 
             modelBuilder.Entity("S2O1.Domain.Entities.TitlePermission", b =>
@@ -1341,7 +1344,7 @@ namespace S2O1.DataAccess.Migrations
 
                     b.HasIndex("TitleId");
 
-                    b.ToTable("TitlePermissions", (string)null);
+                    b.ToTable("TitlePermissions");
                 });
 
             modelBuilder.Entity("S2O1.Domain.Entities.User", b =>
@@ -1434,7 +1437,7 @@ namespace S2O1.DataAccess.Migrations
                     b.HasIndex("UserName")
                         .IsUnique();
 
-                    b.ToTable("Users", (string)null);
+                    b.ToTable("Users");
                 });
 
             modelBuilder.Entity("S2O1.Domain.Entities.UserApiKey", b =>
@@ -1482,7 +1485,7 @@ namespace S2O1.DataAccess.Migrations
 
                     b.HasIndex("UserId");
 
-                    b.ToTable("UserApiKeys", (string)null);
+                    b.ToTable("UserApiKeys");
                 });
 
             modelBuilder.Entity("S2O1.Domain.Entities.UserPermission", b =>
@@ -1532,7 +1535,7 @@ namespace S2O1.DataAccess.Migrations
 
                     b.HasIndex("UserId");
 
-                    b.ToTable("UserPermissions", (string)null);
+                    b.ToTable("UserPermissions");
                 });
 
             modelBuilder.Entity("S2O1.Domain.Entities.Warehouse", b =>
@@ -1573,7 +1576,7 @@ namespace S2O1.DataAccess.Migrations
 
                     b.HasIndex("CompanyId");
 
-                    b.ToTable("Warehouses", (string)null);
+                    b.ToTable("Warehouses");
                 });
 
             modelBuilder.Entity("S2O1.Domain.Entities.WarehouseShelf", b =>
@@ -1614,7 +1617,7 @@ namespace S2O1.DataAccess.Migrations
 
                     b.HasIndex("WarehouseId");
 
-                    b.ToTable("WarehouseShelves", (string)null);
+                    b.ToTable("WarehouseShelves");
                 });
 
             modelBuilder.Entity("S2O1.Domain.Entities.Category", b =>

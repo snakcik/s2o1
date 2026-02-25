@@ -108,6 +108,10 @@ namespace S2O1.Business.Common.Mappings
                 .ReverseMap();
             CreateMap<Customer, CreateCustomerDto>().ReverseMap();
             CreateMap<Customer, UpdateCustomerDto>().ReverseMap();
+            
+            CreateMap<Role, RoleDto>()
+                .ForMember(d => d.Name, o => o.MapFrom(s => s.RoleName))
+                .ReverseMap();
 
             CreateMap<Title, TitleDto>().ReverseMap();
             CreateMap<Title, CreateTitleDto>().ReverseMap();

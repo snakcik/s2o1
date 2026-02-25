@@ -18,9 +18,9 @@ namespace S2O1.API.Controllers
 
         [HttpGet]
         [Filters.Permission("Warehouse", "Read")] 
-        public async Task<IActionResult> GetAll()
+        public async Task<IActionResult> GetAll([FromQuery] string? searchTerm = null, [FromQuery] int page = 1, [FromQuery] int pageSize = 10)
         {
-            return Ok(await _service.GetAllAsync());
+            return Ok(await _service.GetAllAsync(searchTerm, page, pageSize));
         }
 
         [HttpGet("{id}")]

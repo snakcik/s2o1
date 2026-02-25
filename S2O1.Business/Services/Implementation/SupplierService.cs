@@ -33,7 +33,7 @@ namespace S2O1.Business.Services.Implementation
                                (p.CanRead || p.IsFull));
         }
 
-        public async Task<IEnumerable<SupplierDto>> GetAllAsync(string? status = null)
+        public async Task<S2O1.Business.DTOs.Common.PagedResultDto<SupplierDto>> GetAllAsync(string? status = null, string? searchTerm = null, int page = 1, int pageSize = 10)
         {
             var canSeeDeleted = await CanSeeDeletedAsync();
             var query = _unitOfWork.Repository<Supplier>().Query();
@@ -47,11 +47,32 @@ namespace S2O1.Business.Services.Implementation
             }
             else
             {
+                if (status == "passive") return new S2O1.Business.DTOs.Common.PagedResultDto<SupplierDto>();
                 query = query.Where(x => !x.IsDeleted);
             }
 
-            var suppliers = await query.OrderByDescending(x => x.Id).ToListAsync();
-            return _mapper.Map<IEnumerable<SupplierDto>>(suppliers);
+            if (!string.IsNullOrWhiteSpace(searchTerm))
+            {
+                var search = searchTerm.ToLower();
+                query = query.Where(x => x.SupplierCompanyName.ToLower().Contains(search) || 
+                                         x.SupplierContactName.ToLower().Contains(search) ||
+                                         x.SupplierContactMail.ToLower().Contains(search));
+            }
+
+            var totalCount = await query.CountAsync();
+            var suppliers = await query.OrderByDescending(x => x.Id)
+                                       .Skip((page - 1) * pageSize)
+                                       .Take(pageSize)
+                                       .ToListAsync();
+                                       
+            var mapped = _mapper.Map<IEnumerable<SupplierDto>>(suppliers);
+            return new S2O1.Business.DTOs.Common.PagedResultDto<SupplierDto>
+            {
+                Items = mapped,
+                TotalCount = totalCount,
+                PageNumber = page,
+                PageSize = pageSize
+            };
         }
 
         public async Task<SupplierDto> GetByIdAsync(int id)

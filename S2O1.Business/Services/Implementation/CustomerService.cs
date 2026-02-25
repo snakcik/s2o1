@@ -35,7 +35,7 @@ namespace S2O1.Business.Services.Implementation
 
         // --- Customer Company Methods ---
 
-        public async Task<IEnumerable<CustomerCompanyDto>> GetAllCompaniesAsync(string? status = null)
+        public async Task<S2O1.Business.DTOs.Common.PagedResultDto<CustomerCompanyDto>> GetAllCompaniesAsync(string? status = null, string? searchTerm = null, int page = 1, int pageSize = 10)
         {
             var query = _unitOfWork.Repository<CustomerCompany>().Query();
             if (await CanSeeDeletedAsync())
@@ -50,8 +50,29 @@ namespace S2O1.Business.Services.Implementation
                 query = query.Where(x => !x.IsDeleted);
             }
 
-            var data = await query.OrderByDescending(x => x.Id).ToListAsync();
-            return _mapper.Map<IEnumerable<CustomerCompanyDto>>(data);
+            if (!string.IsNullOrWhiteSpace(searchTerm))
+            {
+                var search = searchTerm.ToLower();
+                query = query.Where(x => x.CustomerCompanyName.ToLower().Contains(search) || 
+                                         x.CustomerCompanyAddress.ToLower().Contains(search) ||
+                                         x.CustomerCompanyMail.ToLower().Contains(search));
+            }
+
+            var totalCount = await query.CountAsync();
+            var data = await query.OrderByDescending(x => x.Id)
+                .Skip((page - 1) * pageSize)
+                .Take(pageSize)
+                .ToListAsync();
+
+            var mappedData = _mapper.Map<IEnumerable<CustomerCompanyDto>>(data);
+
+            return new S2O1.Business.DTOs.Common.PagedResultDto<CustomerCompanyDto>
+            {
+                Items = mappedData,
+                TotalCount = totalCount,
+                PageNumber = page,
+                PageSize = pageSize
+            };
         }
 
         public async Task<CustomerCompanyDto> GetCompanyByIdAsync(int id)
@@ -100,7 +121,7 @@ namespace S2O1.Business.Services.Implementation
 
         // --- Customer Methods ---
 
-        public async Task<IEnumerable<CustomerDto>> GetAllCustomersAsync(string? status = null)
+        public async Task<S2O1.Business.DTOs.Common.PagedResultDto<CustomerDto>> GetAllCustomersAsync(string? status = null, string? searchTerm = null, int page = 1, int pageSize = 10)
         {
             var canSeeDeleted = await CanSeeDeletedAsync();
             var query = _unitOfWork.Repository<Customer>().Query();
@@ -116,8 +137,30 @@ namespace S2O1.Business.Services.Implementation
             {
                 query = query.Include(x => x.CustomerCompany).Where(x => !x.IsDeleted);
             }
-            var data = await query.OrderByDescending(x => x.Id).ToListAsync();
-            return _mapper.Map<IEnumerable<CustomerDto>>(data);
+            if (!string.IsNullOrWhiteSpace(searchTerm))
+            {
+                var search = searchTerm.ToLower();
+                query = query.Where(x => x.CustomerContactPersonName.ToLower().Contains(search) || 
+                                         x.CustomerContactPersonLastName.ToLower().Contains(search) ||
+                                         x.CustomerContactPersonMobilPhone.ToLower().Contains(search) || 
+                                         x.CustomerContactPersonMail.ToLower().Contains(search));
+            }
+
+            var totalCount = await query.CountAsync();
+            var data = await query.OrderByDescending(x => x.Id)
+                .Skip((page - 1) * pageSize)
+                .Take(pageSize)
+                .ToListAsync();
+
+            var mappedData = _mapper.Map<IEnumerable<CustomerDto>>(data);
+
+            return new S2O1.Business.DTOs.Common.PagedResultDto<CustomerDto>
+            {
+                Items = mappedData,
+                TotalCount = totalCount,
+                PageNumber = page,
+                PageSize = pageSize
+            };
         }
 
         public async Task<CustomerDto> GetCustomerByIdAsync(int id)

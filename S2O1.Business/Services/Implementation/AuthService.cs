@@ -194,21 +194,21 @@ namespace S2O1.Business.Services.Implementation
             return true;
         }
 
-        public async Task<IEnumerable<UserDto>> GetAllUsersAsync(int? currentUserId = null, string? status = null)
+        public async Task<S2O1.Business.DTOs.Common.PagedResultDto<UserDto>> GetAllUsersAsync(int? currentUserId = null, string? status = null, string? requiredModule = null, string? searchTerm = null, int page = 1, int pageSize = 10)
         {
             var canSeeDeleted = await CanSeeDeletedAsync();
             var query = _unitOfWork.Repository<User>().Query();
 
             if (canSeeDeleted)
             {
-                query = query.IgnoreQueryFilters().Include(u => u.Title);
+                query = query.IgnoreQueryFilters().Include(u => u.Title).Include(u => u.Role).Include(u => u.Permissions);
                 if (status == "passive") query = query.Where(u => u.IsDeleted);
                 else if (status == "all") query = query.Where(u => true);
                 else query = query.Where(u => !u.IsDeleted);
             }
             else
             {
-                query = query.Include(u => u.Title).Where(u => !u.IsDeleted);
+                query = query.Include(u => u.Title).Include(u => u.Role).Include(u => u.Permissions).Where(u => !u.IsDeleted);
             }
 
             if (currentUserId.HasValue)
@@ -216,13 +216,36 @@ namespace S2O1.Business.Services.Implementation
                 query = query.Where(u => u.CreatedByUserId == currentUserId.Value);
             }
 
-            var users = await query.OrderByDescending(x => x.Id).ToListAsync();
+            if (!string.IsNullOrWhiteSpace(searchTerm))
+            {
+                var search = searchTerm.ToLower();
+                query = query.Where(u => u.UserName.ToLower().Contains(search) || u.UserFirstName.ToLower().Contains(search) || u.UserLastName.ToLower().Contains(search));
+            }
+
+            var totalCount = await query.CountAsync();
+            var users = await query.OrderByDescending(x => x.Id)
+                .Skip((page - 1) * pageSize)
+                .Take(pageSize)
+                .ToListAsync();
 
             var dtos = new System.Collections.Generic.List<UserDto>();
             var roles = await _unitOfWork.Repository<Role>().GetAllAsync();
             
             foreach (var user in users)
             {
+                if (!string.IsNullOrEmpty(requiredModule) && user.Id != 1)
+                {
+                    // Check if this user has access to the module
+                    var perm = await _unitOfWork.Repository<UserPermission>().Query()
+                        .Include(p => p.Module)
+                        .FirstOrDefaultAsync(p => p.UserId == user.Id && p.Module.ModuleName.ToLower() == requiredModule.ToLower());
+                    
+                    if (perm == null || (!perm.CanRead && !perm.CanWrite && !perm.IsFull))
+                    {
+                        continue;
+                    }
+                }
+
                 var dto = _mapper.Map<UserDto>(user);
                 var role = roles.FirstOrDefault(r => r.Id == user.RoleId);
                 dto.Role = role?.RoleName;
@@ -231,7 +254,14 @@ namespace S2O1.Business.Services.Implementation
                 dto.QuickActionsJson = user.QuickActionsJson;
                 dtos.Add(dto);
             }
-            return dtos;
+
+            return new S2O1.Business.DTOs.Common.PagedResultDto<UserDto>
+            {
+                Items = dtos,
+                TotalCount = totalCount,
+                PageNumber = page,
+                PageSize = pageSize
+            };
         }
 
         public async Task<IEnumerable<ModuleDto>> GetAllModulesAsync()
@@ -681,6 +711,12 @@ namespace S2O1.Business.Services.Implementation
                 .AnyAsync(p => p.UserId == _currentUserService.UserId && 
                                p.Module.ModuleName == "ShowDeletedItems" && 
                                (p.CanRead || p.IsFull));
+        }
+
+        public async Task<IEnumerable<RoleDto>> GetAllRolesAsync()
+        {
+            var roles = await _unitOfWork.Repository<Role>().GetAllAsync();
+            return _mapper.Map<IEnumerable<RoleDto>>(roles);
         }
     }
 }
