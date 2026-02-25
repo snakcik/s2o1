@@ -26,6 +26,7 @@ services:
       ConnectionStrings__DockerConnection: "Server=db;Database=2S1O;User Id=sa;Password=Q1w2e3r4!;Encrypt=True;TrustServerCertificate=True;"
       ASPNETCORE_ENVIRONMENT: "Production"
       DOTNET_RUNNING_IN_CONTAINER: "true"
+      Logging__LogLevel__Microsoft.EntityFrameworkCore.Database.Command: "Warning"
     depends_on:
       db:
         condition: service_healthy
