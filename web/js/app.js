@@ -961,7 +961,17 @@ function applyPermissions() {
     const userId = user.id;
 
     // Root user see everything
-    if (userId === 1) return;
+    if (userId === 1) {
+        document.querySelectorAll('.menu-item[data-module]').forEach(item => {
+            item.style.display = 'flex';
+        });
+
+        // Make sidebar visible after DOM update for root
+        const sidebar = document.getElementById('sidebar');
+        if (sidebar) sidebar.style.visibility = 'visible';
+
+        return;
+    }
 
     const permissions = user.permissions || [];
 
@@ -1015,6 +1025,10 @@ function applyPermissions() {
             }
         }
     });
+
+    // Make sidebar visible after DOM update
+    const sidebar = document.getElementById('sidebar');
+    if (sidebar) sidebar.style.visibility = 'visible';
 }
 
 window.logout = function () {
